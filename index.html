@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0a1a">
+  <title>StudyCards</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ===== LOADING ===== -->
+    <div id="loading-screen" class="screen">
+      <div class="loading-content">
+        <div class="loading-logo">S</div>
+        <h1>StudyCards</h1>
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Karten werden geladen...</p>
+      </div>
+    </div>
+
+    <!-- ===== SETUP ===== -->
+    <div id="setup-screen" class="screen hidden">
+      <div class="setup-content">
+        <div class="setup-logo">S</div>
+        <h1>StudyCards</h1>
+        <p class="setup-subtitle">Verbinde dein GitHub-Repository</p>
+        <form id="setup-form">
+          <div class="input-group">
+            <label for="setup-owner">GitHub Benutzername</label>
+            <input type="text" id="setup-owner" placeholder="z.B. istvanpal" required>
+          </div>
+          <div class="input-group">
+            <label for="setup-repo">Repository Name</label>
+            <input type="text" id="setup-repo" placeholder="z.B. studium-cards" required>
+          </div>
+          <div class="input-group">
+            <label for="setup-folder">Ordnerpfad <span class="optional">(optional)</span></label>
+            <input type="text" id="setup-folder" placeholder="z.B. Lernkarten">
+          </div>
+          <div class="input-group">
+            <label for="setup-branch">Branch</label>
+            <input type="text" id="setup-branch" placeholder="main" value="main">
+          </div>
+          <button type="submit" class="btn btn-primary btn-lg">Verbinden</button>
+        </form>
+        <p class="setup-hint">Die App liest .md-Dateien mit <code>## Lernkarten</code>-Abschnitten aus deinem Repo.</p>
+      </div>
+    </div>
+
+    <!-- ===== DASHBOARD ===== -->
+    <div id="dashboard-screen" class="screen hidden">
+      <header class="dashboard-header">
+        <h1 class="app-title">StudyCards</h1>
+        <button class="icon-btn" id="btn-refresh" title="Aktualisieren">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+      </header>
+
+      <!-- Stats Bar -->
+      <div class="stats-bar">
+        <div class="stat-item stat-streak">
+          <span class="stat-icon">&#x1F525;</span>
+          <div>
+            <span class="stat-value" id="dash-streak">0</span>
+            <span class="stat-label">Streak</span>
+          </div>
+        </div>
+        <div class="stat-item stat-xp">
+          <span class="stat-icon">&#x26A1;</span>
+          <div>
+            <span class="stat-value" id="dash-xp">0</span>
+            <span class="stat-label">XP</span>
+          </div>
+        </div>
+        <div class="stat-item stat-level">
+          <span class="stat-icon">&#x2B50;</span>
+          <div>
+            <span class="stat-value" id="dash-level">1</span>
+            <span class="stat-label">Level</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Level Progress -->
+      <div class="level-progress-container">
+        <div class="level-progress-bar">
+          <div class="level-progress-fill" id="dash-level-progress" style="width: 0%"></div>
+        </div>
+        <span class="level-progress-text" id="dash-level-text">0 / 100 XP</span>
+      </div>
+
+      <!-- Daily Progress -->
+      <div class="card-panel daily-panel">
+        <h3>Heute</h3>
+        <div class="daily-stats">
+          <div class="daily-stat">
+            <span class="daily-stat-value" id="dash-due">0</span>
+            <span class="daily-stat-label">Fällig</span>
+          </div>
+          <div class="daily-stat">
+            <span class="daily-stat-value" id="dash-new">0</span>
+            <span class="daily-stat-label">Neue</span>
+          </div>
+          <div class="daily-stat">
+            <span class="daily-stat-value" id="dash-reviewed">0</span>
+            <span class="daily-stat-label">Gelernt</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Start Button -->
+      <button class="btn btn-primary btn-lg btn-study" id="btn-start-study">
+        Lernen starten
+      </button>
+
+      <!-- Deck List -->
+      <div class="card-panel">
+        <h3>Decks</h3>
+        <div id="deck-list" class="deck-list"></div>
+      </div>
+
+      <!-- Bottom Nav -->
+      <nav class="bottom-nav">
+        <button class="nav-item active" data-screen="dashboard">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          <span>Home</span>
+        </button>
+        <button class="nav-item" data-screen="stats">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+          <span>Statistik</span>
+        </button>
+        <button class="nav-item" data-screen="settings">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/></svg>
+          <span>Einstellungen</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- ===== STUDY ===== -->
+    <div id="study-screen" class="screen hidden">
+      <header class="study-header">
+        <button class="icon-btn" id="btn-back-study">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <div class="study-progress-info">
+          <span id="study-counter">0 / 0</span>
+          <span id="study-source" class="study-source"></span>
+        </div>
+        <div style="width:24px"></div>
+      </header>
+
+      <div class="study-progress-bar">
+        <div class="study-progress-fill" id="study-progress-fill"></div>
+      </div>
+
+      <div class="study-area">
+        <div class="flashcard" id="flashcard">
+          <div class="flashcard-inner" id="flashcard-inner">
+            <div class="flashcard-front">
+              <div class="flashcard-label">FRAGE</div>
+              <div class="flashcard-content" id="card-question"></div>
+            </div>
+            <div class="flashcard-back">
+              <div class="flashcard-label">ANTWORT</div>
+              <div class="flashcard-content" id="card-answer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="study-actions">
+        <div id="show-answer-container">
+          <button class="btn btn-primary btn-lg btn-full" id="btn-show-answer">Antwort zeigen</button>
+        </div>
+        <div id="rating-container" class="hidden">
+          <p class="rating-prompt">Wie gut wusstest du die Antwort?</p>
+          <div class="rating-buttons">
+            <button class="btn btn-rate btn-again" data-quality="1">
+              <span class="rate-label">Nochmal</span>
+              <span class="rate-interval" id="interval-again"></span>
+            </button>
+            <button class="btn btn-rate btn-hard" data-quality="3">
+              <span class="rate-label">Schwer</span>
+              <span class="rate-interval" id="interval-hard"></span>
+            </button>
+            <button class="btn btn-rate btn-good" data-quality="4">
+              <span class="rate-label">Gut</span>
+              <span class="rate-interval" id="interval-good"></span>
+            </button>
+            <button class="btn btn-rate btn-easy" data-quality="5">
+              <span class="rate-label">Leicht</span>
+              <span class="rate-interval" id="interval-easy"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SESSION COMPLETE ===== -->
+    <div id="complete-screen" class="screen hidden">
+      <div class="complete-content">
+        <div class="complete-icon">&#x1F389;</div>
+        <h2>Session abgeschlossen!</h2>
+        <div class="complete-stats">
+          <div class="complete-stat">
+            <span class="complete-stat-value" id="complete-total">0</span>
+            <span class="complete-stat-label">Karten gelernt</span>
+          </div>
+          <div class="complete-stat">
+            <span class="complete-stat-value" id="complete-xp">+0</span>
+            <span class="complete-stat-label">XP verdient</span>
+          </div>
+          <div class="complete-stat">
+            <span class="complete-stat-value" id="complete-accuracy">0%</span>
+            <span class="complete-stat-label">Richtig</span>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-lg" id="btn-back-dashboard">Zum Dashboard</button>
+        <button class="btn btn-secondary btn-lg" id="btn-continue-study">Weiter lernen</button>
+      </div>
+    </div>
+
+    <!-- ===== STATS ===== -->
+    <div id="stats-screen" class="screen hidden">
+      <header class="screen-header">
+        <h2>Statistik</h2>
+      </header>
+      <div class="stats-content">
+        <div class="card-panel">
+          <h3>Gesamtfortschritt</h3>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span class="stat-box-value" id="stats-total-cards">0</span>
+              <span class="stat-box-label">Karten gesamt</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="stats-learned">0</span>
+              <span class="stat-box-label">Gelernt</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="stats-mature">0</span>
+              <span class="stat-box-label">Reif (>21d)</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="stats-accuracy">0%</span>
+              <span class="stat-box-label">Genauigkeit</span>
+            </div>
+          </div>
+        </div>
+        <div class="card-panel">
+          <h3>Aktivität (letzte 7 Tage)</h3>
+          <div class="heatmap" id="stats-heatmap"></div>
+        </div>
+        <div class="card-panel">
+          <h3>Bestleistungen</h3>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span class="stat-box-value" id="stats-best-streak">0</span>
+              <span class="stat-box-label">Bester Streak</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="stats-total-xp">0</span>
+              <span class="stat-box-label">Gesamt-XP</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="stats-total-reviews">0</span>
+              <span class="stat-box-label">Reviews gesamt</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="stats-best-day">0</span>
+              <span class="stat-box-label">Bester Tag</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <nav class="bottom-nav">
+        <button class="nav-item" data-screen="dashboard">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          <span>Home</span>
+        </button>
+        <button class="nav-item active" data-screen="stats">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+          <span>Statistik</span>
+        </button>
+        <button class="nav-item" data-screen="settings">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/></svg>
+          <span>Einstellungen</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- ===== SETTINGS ===== -->
+    <div id="settings-screen" class="screen hidden">
+      <header class="screen-header">
+        <h2>Einstellungen</h2>
+      </header>
+      <div class="settings-content">
+        <div class="card-panel">
+          <h3>Repository</h3>
+          <div class="setting-row">
+            <span class="setting-label">Benutzer</span>
+            <span class="setting-value" id="settings-owner">-</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Repo</span>
+            <span class="setting-value" id="settings-repo">-</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Ordner</span>
+            <span class="setting-value" id="settings-folder">-</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Branch</span>
+            <span class="setting-value" id="settings-branch">main</span>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-change-repo">Repository ändern</button>
+        </div>
+        <div class="card-panel">
+          <h3>Lerneinstellungen</h3>
+          <div class="setting-row">
+            <span class="setting-label">Neue Karten pro Tag</span>
+            <select id="settings-new-per-day">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20" selected>20</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+              <option value="999">Unbegrenzt</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-panel">
+          <h3>Daten</h3>
+          <p class="setting-info">Lernfortschritt wird lokal im Browser gespeichert.</p>
+          <div class="setting-row">
+            <span class="setting-label">Karten im Speicher</span>
+            <span class="setting-value" id="settings-card-count">0</span>
+          </div>
+          <button class="btn btn-danger btn-sm" id="btn-reset-progress">Fortschritt zurücksetzen</button>
+        </div>
+        <div class="card-panel">
+          <h3>Info</h3>
+          <p class="setting-info">StudyCards v1.0<br>Lerne deine Obsidian-Notizen mit Spaced Repetition.</p>
+        </div>
+      </div>
+      <nav class="bottom-nav">
+        <button class="nav-item" data-screen="dashboard">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+          <span>Home</span>
+        </button>
+        <button class="nav-item" data-screen="stats">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+          <span>Statistik</span>
+        </button>
+        <button class="nav-item active" data-screen="settings">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/></svg>
+          <span>Einstellungen</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden"></div>
+
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
