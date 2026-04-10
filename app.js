@@ -56,6 +56,17 @@
     return Math.round(days / 365) + ' J';
   }
 
+  // ===== SECURITY: HTML Escaping =====
+  const _escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  function escapeHTML(str) {
+    return str.replace(/[&<>"']/g, c => _escapeMap[c]);
+  }
+
+  const SAFE_PARAM = /^[a-zA-Z0-9._-]+$/;
+  const MAX_FILES = 100;
+  const MAX_TEXT_LENGTH = 10000;
+  const FETCH_BATCH_SIZE = 10;
+
   // ===== MARKDOWN PARSER =====
   const Parser = {
     extractCards(markdown, filePath) {
@@ -124,11 +135,18 @@
 
     renderMarkdown(text) {
       if (!text) return '';
-      let html = text
-        // Bold
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        // Italic
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+
+      // DoS-Schutz: Textlänge begrenzen
+      if (text.length > MAX_TEXT_LENGTH) {
+        text = text.slice(0, MAX_TEXT_LENGTH) + '\n\n[Text gekürzt...]';
+      }
+
+      // SECURITY: Zuerst alle HTML-Entities escapen, dann Markdown-Syntax ersetzen
+      let html = escapeHTML(text)
+        // Bold (sicherer Regex: [^*]+ statt .+?)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        // Italic (Negative Lookaround verhindert Konflikte mit Bold)
+        .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
         // Inline code
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         // Unordered lists
@@ -237,8 +255,15 @@
 
   // ===== GITHUB API =====
   const GitHub = {
+    _validateParams(owner, repo, branch) {
+      if (!SAFE_PARAM.test(owner) || !SAFE_PARAM.test(repo) || !SAFE_PARAM.test(branch)) {
+        throw new Error('Ungültige Repository-Parameter (nur a-z, 0-9, . _ - erlaubt)');
+      }
+    },
+
     async fetchTree(owner, repo, branch) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+      this._validateParams(owner, repo, branch);
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`GitHub API Fehler: ${res.status} ${res.statusText}`);
       const data = await res.json();
@@ -246,7 +271,8 @@
     },
 
     async fetchFile(owner, repo, branch, path) {
-      const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodeURIComponent(path).replace(/%2F/g, '/')}`;
+      this._validateParams(owner, repo, branch);
+      const url = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encodeURIComponent(path).replace(/%2F/g, '/')}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Datei nicht gefunden: ${path}`);
       return res.text();
@@ -438,11 +464,27 @@
     isFlipped: false,
     currentDeckFilter: null,
 
+    // ----- Config Validation -----
+    _validateConfig(config) {
+      if (!config || typeof config !== 'object') return null;
+      if (!config.owner || !config.repo) return null;
+      if (!SAFE_PARAM.test(config.owner) || !SAFE_PARAM.test(config.repo)) return null;
+      if (config.branch && !SAFE_PARAM.test(config.branch)) return null;
+      config.branch = config.branch || 'main';
+      config.newPerDay = Math.min(Math.max(1, parseInt(config.newPerDay) || DEFAULT_NEW_PER_DAY), 999);
+      return config;
+    },
+
     // ----- Init -----
     async init() {
       Stats.load();
       CardStore.load();
-      this.config = load(STORAGE_KEYS.config);
+      const rawConfig = load(STORAGE_KEYS.config);
+      this.config = this._validateConfig(rawConfig);
+      if (rawConfig && !this.config) {
+        console.warn('Ungültige Config gefunden, wird verworfen');
+        localStorage.removeItem(STORAGE_KEYS.config);
+      }
       this._bindEvents();
 
       if (!this.config) {
@@ -531,7 +573,13 @@
 
       if (!owner || !repo) return;
 
-      this.config = { owner, repo, folder, branch, newPerDay: DEFAULT_NEW_PER_DAY };
+      // Input-Validierung
+      if (!SAFE_PARAM.test(owner) || !SAFE_PARAM.test(repo) || !SAFE_PARAM.test(branch)) {
+        this.showToast('Ungültige Zeichen! Nur a-z, 0-9, . _ - erlaubt.');
+        return;
+      }
+
+      this.config = { owner, repo, folder, branch, newPerDay: DEFAULT_NEW_PER_DAY, showXP: true };
       save(STORAGE_KEYS.config, this.config);
       this.loadCards();
     },
@@ -559,20 +607,28 @@
           mdFiles = tree.filter(f => f.path.startsWith(prefix));
         }
 
-        // Fetch all md files and extract cards
-        this.allCards = [];
-        const fetchPromises = mdFiles.map(async (file) => {
-          try {
-            const content = await GitHub.fetchFile(owner, repo, branch, file.path);
-            const cards = Parser.extractCards(content, file.path);
-            return cards;
-          } catch {
-            return [];
-          }
-        });
+        // DoS-Schutz: Datei-Anzahl begrenzen
+        if (mdFiles.length > MAX_FILES) {
+          console.warn(`${mdFiles.length} Dateien gefunden, auf ${MAX_FILES} begrenzt`);
+          mdFiles = mdFiles.slice(0, MAX_FILES);
+        }
 
-        const results = await Promise.all(fetchPromises);
-        this.allCards = results.flat();
+        // Batch-Loading: nicht alle gleichzeitig fetchen
+        this.allCards = [];
+        for (let i = 0; i < mdFiles.length; i += FETCH_BATCH_SIZE) {
+          const batch = mdFiles.slice(i, i + FETCH_BATCH_SIZE);
+          const results = await Promise.all(
+            batch.map(async (file) => {
+              try {
+                const content = await GitHub.fetchFile(owner, repo, branch, file.path);
+                return Parser.extractCards(content, file.path);
+              } catch {
+                return [];
+              }
+            })
+          );
+          this.allCards.push(...results.flat());
+        }
 
         // Cache timestamp
         save(STORAGE_KEYS.cache, { lastFetch: new Date().toISOString(), cardCount: this.allCards.length });
@@ -685,9 +741,10 @@
         .map(([name, info]) => {
           const dueCount = info.due + Math.min(info.new, this.config?.newPerDay || DEFAULT_NEW_PER_DAY);
           const hasDue = dueCount > 0;
+          const safeName = escapeHTML(name);
           return `
-            <button class="deck-item" data-deck="${name}">
-              <span class="deck-item-name">${name}</span>
+            <button class="deck-item" data-deck="${safeName}">
+              <span class="deck-item-name">${safeName}</span>
               <span class="deck-item-count ${hasDue ? 'has-due' : ''}">${hasDue ? dueCount + ' fällig' : info.total + ' Karten'}</span>
             </button>`;
         })
@@ -910,8 +967,65 @@
     },
   };
 
+  // ===== SERVICE WORKER & PWA =====
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+
+    // Pfad dynamisch: /studycards/sw.js auf GitHub Pages, /sw.js lokal
+    const basePath = location.pathname.includes('/studycards') ? '/studycards/' : '/';
+    navigator.serviceWorker.register(basePath + 'sw.js').then((reg) => {
+      // Prüfe regelmäßig auf Updates (alle 30 Min)
+      setInterval(() => reg.update(), 30 * 60 * 1000);
+
+      // Neuer Service Worker wartet → Update-Toast zeigen
+      const showUpdateToast = (worker) => {
+        const toast = document.getElementById('toast');
+        toast.textContent = '';
+
+        const msg = document.createElement('span');
+        msg.textContent = 'Neue Version verfügbar! ';
+
+        const btn = document.createElement('button');
+        btn.textContent = 'Aktualisieren';
+        btn.style.cssText = 'background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:8px;margin-left:8px;font-weight:600;cursor:pointer;';
+        btn.addEventListener('click', () => {
+          worker.postMessage({ type: 'SKIP_WAITING' });
+        });
+
+        toast.appendChild(msg);
+        toast.appendChild(btn);
+        toast.classList.remove('hidden');
+        toast.classList.add('show');
+        // Kein Auto-Hide — User soll bewusst klicken
+      };
+
+      if (reg.waiting) {
+        showUpdateToast(reg.waiting);
+      }
+
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateToast(newWorker);
+          }
+        });
+      });
+    }).catch((err) => {
+      console.warn('Service Worker Registrierung fehlgeschlagen:', err);
+    });
+
+    // Wenn neuer SW aktiviert wird → Seite neu laden
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
+  }
+
   // ===== BOOT =====
   document.addEventListener('DOMContentLoaded', () => {
+    // Service Worker registrieren
+    registerServiceWorker();
+
     // Wait for KaTeX to load
     const waitForKaTeX = () => {
       if (typeof renderMathInElement === 'function') {
