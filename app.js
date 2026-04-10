@@ -513,6 +513,13 @@
           save(STORAGE_KEYS.config, this.config);
         }
       });
+
+      document.getElementById('settings-show-xp').addEventListener('change', (e) => {
+        if (this.config) {
+          this.config.showXP = e.target.checked;
+          save(STORAGE_KEYS.config, this.config);
+        }
+      });
     },
 
     // ----- Setup -----
@@ -808,8 +815,11 @@
       this.sessionTotal++;
       if (quality >= 3) this.sessionCorrect++;
 
-      // XP popup
-      this._showXPPopup('+' + xpEarned + ' XP');
+      // XP popup (nur wenn aktiviert)
+      const showXP = this.config?.showXP !== false;
+      if (showXP) {
+        this._showXPPopup('+' + xpEarned + ' XP');
+      }
 
       // Next card
       this.studyIndex++;
@@ -885,6 +895,7 @@
       document.getElementById('settings-branch').textContent = this.config.branch;
       document.getElementById('settings-card-count').textContent = Object.keys(CardStore.states).length;
       document.getElementById('settings-new-per-day').value = this.config.newPerDay || DEFAULT_NEW_PER_DAY;
+      document.getElementById('settings-show-xp').checked = this.config.showXP !== false;
     },
 
     // ----- Toast -----
