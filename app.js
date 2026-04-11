@@ -682,8 +682,8 @@
       const newCards = visibleCards.filter(c => CardStore.isNew(c.id));
       const newPerDay = this.config?.newPerDay || DEFAULT_NEW_PER_DAY;
 
-      // Count how many new cards were learned today
-      const todayNewLearned = visibleCards.filter(c => {
+      // Tageslimit GLOBAL berechnen (über alle Karten, nicht nur gefilterte)
+      const todayNewLearned = this.allCards.filter(c => {
         const state = CardStore.states[c.id];
         return state && state.lastReview === today() && state.totalReviews === 1;
       }).length;
@@ -701,12 +701,12 @@
       document.getElementById('dash-level-text').textContent =
         Stats.xpInLevel + ' / ' + XP_PER_LEVEL + ' XP bis Level ' + (Stats.level + 1);
 
-      // Daily stats
+      // Daily stats: echte Zahlen anzeigen (Neue = alle neuen, nicht gekappt)
       document.getElementById('dash-due').textContent = dueCards.length;
-      document.getElementById('dash-new').textContent = availableNew;
+      document.getElementById('dash-new').textContent = newCards.length;
       document.getElementById('dash-reviewed').textContent = Stats.getTodayReviews();
 
-      // Study button text
+      // Study button: gekappt (was du tatsächlich lernst)
       const totalStudy = dueCards.length + availableNew;
       const studyBtn = document.getElementById('btn-start-study');
       if (totalStudy > 0) {
@@ -786,13 +786,13 @@
       container.innerHTML = Object.entries(deckMap)
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([name, info]) => {
-          const dueCount = info.due + Math.min(info.new, this.config?.newPerDay || DEFAULT_NEW_PER_DAY);
-          const hasDue = dueCount > 0;
+          const totalAvailable = info.due + info.new;
+          const hasDue = totalAvailable > 0;
           const safeName = escapeHTML(name);
           return `
             <button class="deck-item" data-deck="${safeName}">
               <span class="deck-item-name">${safeName}</span>
-              <span class="deck-item-count ${hasDue ? 'has-due' : ''}">${hasDue ? dueCount + ' fällig' : info.total + ' Karten'}</span>
+              <span class="deck-item-count ${hasDue ? 'has-due' : ''}">${hasDue ? totalAvailable + ' fällig' : info.total + ' Karten'}</span>
             </button>`;
         })
         .join('');
