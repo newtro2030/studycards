@@ -73,10 +73,15 @@
       const cards = [];
       const fileName = filePath.split('/').pop().replace(/\.md$/, '');
 
-      // Find ## Lernkarten section (case insensitive)
-      const sectionRegex = /^##\s+Lernkarten?\s*$/im;
+      // Find ## Lernkarten section (case insensitive), optionally with #tags
+      const sectionRegex = /^##\s+Lernkarten?\s*(.*)?$/im;
       const match = sectionRegex.exec(markdown);
       if (!match) return cards;
+
+      // Extract hashtags from header line: ## Lernkarten #BWL #Finanzen
+      const tagString = match[1] || '';
+      const tags = (tagString.match(/#([a-zA-ZäöüÄÖÜß0-9_-]+)/g) || [])
+        .map(t => t.slice(1)); // Remove # prefix
 
       // Get content after ## Lernkarten until next ## or end
       const afterSection = markdown.slice(match.index + match[0].length);
@@ -98,7 +103,7 @@
         if (qMatch) {
           // Save previous card
           if (currentQ && currentA.length > 0) {
-            cards.push(this._makeCard(currentQ, currentA.join('\n').trim(), filePath, fileName));
+            cards.push(this._makeCard(currentQ, currentA.join('\n').trim(), filePath, fileName, tags));
           }
           currentQ = qMatch[1].trim();
           currentA = [];
@@ -116,13 +121,13 @@
 
       // Save last card
       if (currentQ && currentA.length > 0) {
-        cards.push(this._makeCard(currentQ, currentA.join('\n').trim(), filePath, fileName));
+        cards.push(this._makeCard(currentQ, currentA.join('\n').trim(), filePath, fileName, tags));
       }
 
       return cards;
     },
 
-    _makeCard(question, answer, filePath, fileName) {
+    _makeCard(question, answer, filePath, fileName, tags) {
       const id = hashString(filePath + '::' + question);
       return {
         id,
@@ -130,6 +135,7 @@
         answer,
         source: filePath,
         deck: fileName,
+        tags: tags || [],
       };
     },
 
@@ -463,6 +469,7 @@
     sessionTotal: 0,
     isFlipped: false,
     currentDeckFilter: null,
+    currentTagFilter: null,
 
     // ----- Config Validation -----
     _validateConfig(config) {
@@ -670,12 +677,13 @@
 
     // ----- Dashboard -----
     _renderDashboard() {
-      const dueCards = this.allCards.filter(c => CardStore.isDue(c.id));
-      const newCards = this.allCards.filter(c => CardStore.isNew(c.id));
+      const visibleCards = this._getFilteredCards();
+      const dueCards = visibleCards.filter(c => CardStore.isDue(c.id));
+      const newCards = visibleCards.filter(c => CardStore.isNew(c.id));
       const newPerDay = this.config?.newPerDay || DEFAULT_NEW_PER_DAY;
 
       // Count how many new cards were learned today
-      const todayNewLearned = this.allCards.filter(c => {
+      const todayNewLearned = visibleCards.filter(c => {
         const state = CardStore.states[c.id];
         return state && state.lastReview === today() && state.totalReviews === 1;
       }).length;
@@ -711,15 +719,54 @@
         studyBtn.style.opacity = '0.5';
       }
 
-      // Deck list
+      // Tag filter + Deck list
+      this._renderTagFilter();
       this._renderDecks();
+    },
+
+    // ----- Tag Filter -----
+    _getFilteredCards() {
+      if (!this.currentTagFilter) return this.allCards;
+      return this.allCards.filter(c => c.tags.includes(this.currentTagFilter));
+    },
+
+    _renderTagFilter() {
+      const container = document.getElementById('tag-filter');
+      // Collect all unique tags
+      const allTags = new Set();
+      this.allCards.forEach(c => c.tags.forEach(t => allTags.add(t)));
+
+      if (allTags.size === 0) {
+        container.innerHTML = '';
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      const sorted = [...allTags].sort((a, b) => a.localeCompare(b, 'de'));
+
+      container.innerHTML =
+        `<button class="tag-chip ${!this.currentTagFilter ? 'active' : ''}" data-tag="">Alle</button>` +
+        sorted.map(tag => {
+          const safeTag = escapeHTML(tag);
+          const isActive = this.currentTagFilter === tag;
+          return `<button class="tag-chip ${isActive ? 'active' : ''}" data-tag="${safeTag}">${safeTag}</button>`;
+        }).join('');
+
+      container.querySelectorAll('.tag-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.currentTagFilter = btn.dataset.tag || null;
+          this._renderDashboard();
+        });
+      });
     },
 
     _renderDecks() {
       const container = document.getElementById('deck-list');
       const deckMap = {};
+      const visibleCards = this._getFilteredCards();
 
-      this.allCards.forEach(card => {
+      visibleCards.forEach(card => {
         if (!deckMap[card.deck]) deckMap[card.deck] = { total: 0, due: 0, new: 0 };
         deckMap[card.deck].total++;
         if (CardStore.isDue(card.id)) deckMap[card.deck].due++;
@@ -763,7 +810,8 @@
     _startStudy(deckFilter) {
       const newPerDay = this.config?.newPerDay || DEFAULT_NEW_PER_DAY;
 
-      let cards = this.allCards;
+      // Tag-Filter anwenden, dann optional Deck-Filter
+      let cards = this._getFilteredCards();
       if (deckFilter) {
         cards = cards.filter(c => c.deck === deckFilter);
       }
