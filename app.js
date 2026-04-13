@@ -503,6 +503,8 @@
 
     // ----- Events -----
     _bindEvents() {
+      // Toast soll keine Klicks durchlassen
+      document.getElementById('toast').addEventListener('click', (e) => e.stopPropagation());
       // Setup form
       document.getElementById('setup-form').addEventListener('submit', (e) => {
         e.preventDefault();
@@ -1045,7 +1047,8 @@
         const btn = document.createElement('button');
         btn.textContent = 'Aktualisieren';
         btn.style.cssText = 'background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:8px;margin-left:8px;font-weight:600;cursor:pointer;';
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
           worker.postMessage({ type: 'SKIP_WAITING' });
         });
 
