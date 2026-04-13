@@ -499,6 +499,12 @@
       } else {
         await this.loadCards();
       }
+
+      // Update-Bestätigung nach Reload
+      if (sessionStorage.getItem('sc_updated')) {
+        sessionStorage.removeItem('sc_updated');
+        this.showToast('App aktualisiert auf v1.5 ✓');
+      }
     },
 
     // ----- Events -----
@@ -1077,6 +1083,7 @@
 
     // Wenn neuer SW aktiviert wird → Seite neu laden
     navigator.serviceWorker.addEventListener('controllerchange', () => {
+      sessionStorage.setItem('sc_updated', '1');
       window.location.reload();
     });
   }
