@@ -526,6 +526,7 @@
       document.getElementById('btn-show-answer').addEventListener('click', () => this._flipCard());
       document.getElementById('flashcard').addEventListener('click', () => {
         if (!this.isFlipped) this._flipCard();
+        else this._unflipCard();
       });
 
       // Rating buttons
@@ -897,6 +898,14 @@
       document.getElementById('flashcard').classList.add('flipped');
       document.getElementById('show-answer-container').classList.add('hidden');
       document.getElementById('rating-container').classList.remove('hidden');
+    },
+
+    _unflipCard() {
+      if (!this.isFlipped) return;
+      this.isFlipped = false;
+      document.getElementById('flashcard').classList.remove('flipped');
+      document.getElementById('show-answer-container').classList.remove('hidden');
+      document.getElementById('rating-container').classList.add('hidden');
     },
 
     _rateCard(quality) {
