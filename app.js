@@ -63,7 +63,7 @@
   }
 
   const SAFE_PARAM = /^[a-zA-Z0-9._-]+$/;
-  const MAX_FILES = 100;
+  const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
 
@@ -503,7 +503,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.5 ✓');
+        this.showToast('App aktualisiert auf v1.6 ✓');
       }
     },
 
