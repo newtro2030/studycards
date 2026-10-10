@@ -686,7 +686,16 @@ body {
   word-wrap: break-word;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+}
+
+/* Zentrieren über Auto-Margins statt justify-content: center –
+   so bleibt bei Überlänge (z.B. Querformat + Bild) der Anfang sichtbar und scrollbar */
+.flashcard-content > :first-child {
+  margin-top: auto;
+}
+
+.flashcard-content > :last-child {
+  margin-bottom: auto;
 }
 
 .flashcard-content p {
@@ -1238,10 +1247,73 @@ select:focus {
 }
 
 .lightbox-scroll img.zoomed {
+  flex-shrink: 0; /* sonst drückt der Flex-Container das Bild auf Bildschirmbreite zusammen */
   max-width: none;
   max-height: none;
-  width: 250%;
   cursor: zoom-out;
+}
+
+.lightbox-scroll {
+  touch-action: pan-x pan-y; /* Pinch-Zoom übernimmt die App, Wischen scrollt */
+}
+
+.lightbox-hint {
+  position: absolute;
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Querformat auf dem Handy: Karte nutzt die volle Breite, Bild darf höher werden */
+@media (orientation: landscape) and (max-height: 500px) {
+  .flashcard {
+    max-width: none;
+  }
+
+  .flashcard-front, .flashcard-back {
+    padding: 16px 20px;
+  }
+
+  .flashcard-label {
+    margin-bottom: 8px;
+  }
+
+  .card-img {
+    max-height: 60vh;
+  }
+
+  /* Kopfzeile und Bewertung kompakt, damit die Karte den Großteil der Höhe bekommt */
+  .study-header {
+    padding: 4px 16px;
+  }
+
+  .study-area {
+    padding: 6px 16px;
+    max-height: none;
+  }
+
+  .study-actions {
+    padding: 6px 16px;
+    padding-bottom: calc(6px + var(--safe-bottom));
+  }
+
+  .rating-prompt {
+    display: none;
+  }
+
+  .btn-rate {
+    flex-direction: row;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 4px;
+  }
 }
 
 .lightbox-close {

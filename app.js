@@ -564,7 +564,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.10 ✓');
+        this.showToast('App aktualisiert auf v1.11 ✓');
       }
     },
 
@@ -573,12 +573,58 @@
       // Toast soll keine Klicks durchlassen
       document.getElementById('toast').addEventListener('click', (e) => e.stopPropagation());
 
-      // Lightbox: Tap aufs Bild = Zoom umschalten, Tap daneben / ✕ = schließen
+      // Lightbox: Pinch = zoomen, Doppeltipp = 1x/2,5x, Tap daneben / ✕ = schließen
       const lightbox = document.getElementById('lightbox');
+      const lbImg = document.getElementById('lightbox-img');
+      const lbScroll = lightbox.querySelector('.lightbox-scroll');
+      let pinch = null;
+      let lastTap = 0;
+
+      // Zoom über die Bildbreite (nicht transform) → der Scroll-Container kann normal verschieben
+      const setZoom = (scale, cx, cy) => {
+        scale = Math.min(Math.max(scale, 1), 5);
+        const prev = this._lbScale || 1;
+        this._lbScale = scale;
+        lbImg.classList.toggle('zoomed', scale > 1);
+        lbImg.style.width = scale > 1 ? `${scale * 100}%` : '';
+        // Punkt unter den Fingern an Ort und Stelle halten
+        const ratio = scale / prev;
+        lbScroll.scrollLeft = (lbScroll.scrollLeft + cx) * ratio - cx;
+        lbScroll.scrollTop = (lbScroll.scrollTop + cy) * ratio - cy;
+      };
+      this._resetLightboxZoom = () => { this._lbScale = 1; lbImg.style.width = ''; lbImg.classList.remove('zoomed'); };
+
+      const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+      lbScroll.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          pinch = { d: dist(e.touches), s: this._lbScale || 1 };
+        }
+      }, { passive: true });
+      lbScroll.addEventListener('touchmove', (e) => {
+        if (!pinch || e.touches.length !== 2) return;
+        e.preventDefault();
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        setZoom(pinch.s * dist(e.touches) / pinch.d, cx, cy);
+      }, { passive: false });
+      lbScroll.addEventListener('touchend', (e) => {
+        if (e.touches.length < 2) pinch = null;
+      });
+
       lightbox.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (e.target.id === 'lightbox-img') e.target.classList.toggle('zoomed');
-        else lightbox.classList.add('hidden');
+        if (e.target !== lbImg) {
+          lightbox.classList.add('hidden');
+          return;
+        }
+        // Doppeltipp (bzw. Doppelklick am Mac) wechselt zwischen 1x und 2,5x
+        const now = Date.now();
+        if (now - lastTap < 300) {
+          setZoom((this._lbScale || 1) > 1 ? 1 : 2.5, e.clientX, e.clientY);
+          lastTap = 0;
+        } else {
+          lastTap = now;
+        }
       });
       // Setup form
       document.getElementById('setup-form').addEventListener('submit', (e) => {
@@ -1225,7 +1271,7 @@
       const box = document.getElementById('lightbox');
       const img = document.getElementById('lightbox-img');
       img.src = src;
-      img.classList.remove('zoomed');
+      this._resetLightboxZoom();
       box.classList.remove('hidden');
     },
 
