@@ -66,6 +66,9 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
+  const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
+  const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
+  const IMAGE_CACHE = 'studycards-img';
 
   // ===== MARKDOWN PARSER =====
   const Parser = {
@@ -117,6 +120,9 @@
         } else if (aMatch) {
           currentA = [aMatch[1].trim()];
           collecting = 'a';
+        } else if (collecting === 'q' && line.trim() !== '') {
+          // Mehrzeilige Frage, z.B. Bild unter der Frage
+          currentQ += '\n' + line;
         } else if (collecting === 'a' && line.trim() !== '') {
           currentA.push(line);
         } else if (collecting === 'a' && line.trim() === '' && currentA.length > 0) {
@@ -134,7 +140,8 @@
     },
 
     _makeCard(question, answer, filePath, fileName, tags) {
-      const id = hashString(filePath + '::' + question);
+      // ID nur aus der ersten Fragezeile → Fortschritt bleibt erhalten, wenn z.B. ein Bild ergänzt wird
+      const id = hashString(filePath + '::' + question.split('\n')[0]);
       return {
         id,
         question,
@@ -152,6 +159,22 @@
       if (text.length > MAX_TEXT_LENGTH) {
         text = text.slice(0, MAX_TEXT_LENGTH) + '\n\n[Text gekürzt...]';
       }
+
+      // Bilder: ![[bild.png]], ![[bild.png|300]] (Obsidian) und ![alt](pfad/bild.png)
+      // werden durch Platzhalter ersetzt und erst nach dem Escapen als <img> eingesetzt
+      const images = [];
+      text = text
+        .replace(/!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g, (m, name) => {
+          if (!IMAGE_EXT.test(name.trim())) return m; // z.B. Audio-Einbettungen nicht als Bild behandeln
+          images.push(name.trim());
+          return `\u0000IMG${images.length - 1}\u0000`;
+        })
+        .replace(/!\[[^\]]*\]\(([^)\s]+)\)/g, (m, src) => {
+          let name = src;
+          try { name = decodeURIComponent(src); } catch {}
+          images.push(name);
+          return `\u0000IMG${images.length - 1}\u0000`;
+        });
 
       // SECURITY: Zuerst alle HTML-Entities escapen, dann Markdown-Syntax ersetzen
       let html = escapeHTML(text)
@@ -189,6 +212,10 @@
         table += '</table>';
         return table;
       });
+
+      // Bild-Platzhalter einsetzen (src wird später von App._hydrateImages gesetzt)
+      html = html.replace(/\u0000IMG(\d+)\u0000/g, (m, i) =>
+        `<img class="card-img" alt="" data-img="${escapeHTML(images[+i] || '')}">`);
 
       return html;
     }
@@ -267,27 +294,50 @@
 
   // ===== GITHUB API =====
   const GitHub = {
+    token: null, // optional: Fine-grained PAT für private Repos (nur Lesezugriff)
+
     _validateParams(owner, repo, branch) {
       if (!SAFE_PARAM.test(owner) || !SAFE_PARAM.test(repo) || !SAFE_PARAM.test(branch)) {
         throw new Error('Ungültige Repository-Parameter (nur a-z, 0-9, . _ - erlaubt)');
       }
     },
 
+    _headers(extra = {}) {
+      return this.token ? { ...extra, Authorization: `Bearer ${this.token}` } : extra;
+    },
+
+    _encodePath(path) {
+      return encodeURIComponent(path).replace(/%2F/g, '/');
+    },
+
+    async _fetchRaw(owner, repo, branch, path) {
+      this._validateParams(owner, repo, branch);
+      // Mit Token: Contents-API (unterstützt Auth + CORS), ohne Token: raw.githubusercontent.com
+      const url = this.token
+        ? `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${this._encodePath(path)}?ref=${encodeURIComponent(branch)}`
+        : `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${this._encodePath(path)}`;
+      const res = await fetch(url, { headers: this._headers({ Accept: 'application/vnd.github.raw' }) });
+      if (!res.ok) throw new Error(`Datei nicht gefunden: ${path}`);
+      return res;
+    },
+
     async fetchTree(owner, repo, branch) {
       this._validateParams(owner, repo, branch);
       const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: this._headers() });
+      if (res.status === 401) throw new Error('GitHub-Token ungültig oder abgelaufen');
+      if (res.status === 404) throw new Error('Repo nicht gefunden (bei privaten Repos Token prüfen)');
       if (!res.ok) throw new Error(`GitHub API Fehler: ${res.status} ${res.statusText}`);
       const data = await res.json();
-      return data.tree.filter(f => f.type === 'blob' && f.path.endsWith('.md'));
+      return data.tree.filter(f => f.type === 'blob');
     },
 
     async fetchFile(owner, repo, branch, path) {
-      this._validateParams(owner, repo, branch);
-      const url = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encodeURIComponent(path).replace(/%2F/g, '/')}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Datei nicht gefunden: ${path}`);
-      return res.text();
+      return (await this._fetchRaw(owner, repo, branch, path)).text();
+    },
+
+    async fetchBlob(owner, repo, branch, path) {
+      return (await this._fetchRaw(owner, repo, branch, path)).blob();
     }
   };
 
@@ -477,6 +527,8 @@
     currentDeckFilter: null,
     currentTagFilter: null,
     currentFolderFilter: null,
+    imageIndex: new Map(),   // Dateiname/Pfad → { path, sha }
+    imageUrls: new Map(),    // sha → Object-URL
 
     // ----- Config Validation -----
     _validateConfig(config) {
@@ -485,6 +537,8 @@
       if (!SAFE_PARAM.test(config.owner) || !SAFE_PARAM.test(config.repo)) return null;
       if (config.branch && !SAFE_PARAM.test(config.branch)) return null;
       config.branch = config.branch || 'main';
+      if (config.token && !SAFE_TOKEN.test(config.token)) return null;
+      GitHub.token = config.token || null;
       config.newPerDay = Math.min(Math.max(1, parseInt(config.newPerDay) || DEFAULT_NEW_PER_DAY), 999);
       return config;
     },
@@ -510,7 +564,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.8 ✓');
+        this.showToast('App aktualisiert auf v1.9 ✓');
       }
     },
 
@@ -518,6 +572,14 @@
     _bindEvents() {
       // Toast soll keine Klicks durchlassen
       document.getElementById('toast').addEventListener('click', (e) => e.stopPropagation());
+
+      // Lightbox: Tap aufs Bild = Zoom umschalten, Tap daneben / ✕ = schließen
+      const lightbox = document.getElementById('lightbox');
+      lightbox.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (e.target.id === 'lightbox-img') e.target.classList.toggle('zoomed');
+        else lightbox.classList.add('hidden');
+      });
       // Setup form
       document.getElementById('setup-form').addEventListener('submit', (e) => {
         e.preventDefault();
@@ -593,6 +655,7 @@
       const repo = document.getElementById('setup-repo').value.trim();
       const folder = document.getElementById('setup-folder').value.trim();
       const branch = document.getElementById('setup-branch').value.trim() || 'main';
+      const token = document.getElementById('setup-token').value.trim();
 
       if (!owner || !repo) return;
 
@@ -601,8 +664,18 @@
         this.showToast('Ungültige Zeichen! Nur a-z, 0-9, . _ - erlaubt.');
         return;
       }
+      if (token && !SAFE_TOKEN.test(token)) {
+        this.showToast('Ungültiger Token – bitte vollständig kopieren.');
+        return;
+      }
 
-      this.config = { owner, repo, folder, branch, newPerDay: DEFAULT_NEW_PER_DAY, showXP: true };
+      const prev = this.config || {};
+      this.config = {
+        owner, repo, folder, branch, token: token || undefined,
+        newPerDay: prev.newPerDay || DEFAULT_NEW_PER_DAY,
+        showXP: prev.showXP !== false,
+      };
+      GitHub.token = token || null;
       save(STORAGE_KEYS.config, this.config);
       this.loadCards();
     },
@@ -613,6 +686,7 @@
       document.getElementById('setup-repo').value = this.config.repo || '';
       document.getElementById('setup-folder').value = this.config.folder || '';
       document.getElementById('setup-branch').value = this.config.branch || 'main';
+      document.getElementById('setup-token').value = this.config.token || '';
     },
 
     // ----- Load Cards from GitHub -----
@@ -623,8 +697,17 @@
         const { owner, repo, branch, folder } = this.config;
         const tree = await GitHub.fetchTree(owner, repo, branch);
 
+        // Bilder indexieren: Obsidian verlinkt meist nur den Dateinamen, daher Name UND Pfad
+        this.imageIndex = new Map();
+        tree.filter(f => IMAGE_EXT.test(f.path)).forEach(f => {
+          const entry = { path: f.path, sha: f.sha };
+          this.imageIndex.set(f.path, entry);
+          const name = f.path.split('/').pop();
+          if (!this.imageIndex.has(name)) this.imageIndex.set(name, entry);
+        });
+
         // Filter by folder if set
-        let mdFiles = tree;
+        let mdFiles = tree.filter(f => f.path.endsWith('.md'));
         if (folder) {
           const prefix = folder.endsWith('/') ? folder : folder + '/';
           mdFiles = tree.filter(f => f.path.startsWith(prefix));
@@ -974,6 +1057,8 @@
       // Render LaTeX
       this._renderKaTeX(questionEl);
       this._renderKaTeX(answerEl);
+      this._hydrateImages(questionEl);
+      this._hydrateImages(answerEl);
 
       // Show interval previews
       const state = CardStore.getState(card.id);
@@ -1092,6 +1177,58 @@
       }).join('');
     },
 
+    // ----- Bilder -----
+    async _hydrateImages(container) {
+      const imgs = container.querySelectorAll('img.card-img[data-img]');
+      for (const img of imgs) {
+        const ref = img.dataset.img;
+        const entry = this.imageIndex.get(ref) || this.imageIndex.get(ref.split('/').pop());
+        if (!entry) {
+          img.replaceWith(Object.assign(document.createElement('span'), {
+            className: 'card-img-missing', textContent: `Bild nicht gefunden: ${ref}`,
+          }));
+          continue;
+        }
+        img.addEventListener('click', (e) => {
+          e.stopPropagation(); // Tap aufs Bild soll die Karte nicht umdrehen
+          this._openLightbox(img.src);
+        });
+        try {
+          img.src = await this._imageUrl(entry);
+        } catch {
+          img.alt = 'Bild konnte nicht geladen werden';
+        }
+      }
+    },
+
+    // Lädt ein Bild (Cache-First, Schlüssel = Git-SHA → ändert sich das Bild, ändert sich der SHA)
+    async _imageUrl({ path, sha }) {
+      if (this.imageUrls.has(sha)) return this.imageUrls.get(sha);
+      const key = `./__img/${sha}`;
+      let blob = null;
+      const cache = 'caches' in window ? await caches.open(IMAGE_CACHE).catch(() => null) : null;
+      const hit = cache && await cache.match(key);
+      if (hit) {
+        blob = await hit.blob();
+      } else {
+        const { owner, repo, branch } = this.config;
+        blob = await GitHub.fetchBlob(owner, repo, branch, path);
+        if (cache) cache.put(key, new Response(blob)).catch(() => {});
+      }
+      const url = URL.createObjectURL(blob);
+      this.imageUrls.set(sha, url);
+      return url;
+    },
+
+    _openLightbox(src) {
+      if (!src) return;
+      const box = document.getElementById('lightbox');
+      const img = document.getElementById('lightbox-img');
+      img.src = src;
+      img.classList.remove('zoomed');
+      box.classList.remove('hidden');
+    },
+
     // ----- Settings Screen -----
     _renderSettings() {
       if (!this.config) return;
@@ -1099,6 +1236,7 @@
       document.getElementById('settings-repo').textContent = this.config.repo;
       document.getElementById('settings-folder').textContent = this.config.folder || '(Alle)';
       document.getElementById('settings-branch').textContent = this.config.branch;
+      document.getElementById('settings-token').textContent = this.config.token ? 'gesetzt (privates Repo)' : '–';
       document.getElementById('settings-card-count').textContent = Object.keys(CardStore.states).length;
       document.getElementById('settings-new-per-day').value = this.config.newPerDay || DEFAULT_NEW_PER_DAY;
       document.getElementById('settings-show-xp').checked = this.config.showXP !== false;

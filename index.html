@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0a0a1a">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src https://api.github.com https://raw.githubusercontent.com; worker-src 'self'; frame-ancestors 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; connect-src https://api.github.com https://raw.githubusercontent.com; worker-src 'self'; frame-ancestors 'none';">
   <title>StudyCards</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -51,6 +51,10 @@
           <div class="input-group">
             <label for="setup-branch">Branch</label>
             <input type="text" id="setup-branch" placeholder="main" value="main">
+          </div>
+          <div class="input-group">
+            <label for="setup-token">GitHub-Token <span class="optional">(nur für private Repos)</span></label>
+            <input type="password" id="setup-token" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
           </div>
           <button type="submit" class="btn btn-primary btn-lg">Verbinden</button>
         </form>
@@ -327,6 +331,10 @@
             <span class="setting-label">Branch</span>
             <span class="setting-value" id="settings-branch">main</span>
           </div>
+          <div class="setting-row">
+            <span class="setting-label">Token</span>
+            <span class="setting-value" id="settings-token">–</span>
+          </div>
           <button class="btn btn-secondary btn-sm" id="btn-change-repo">Repository ändern</button>
         </div>
         <div class="card-panel">
@@ -362,7 +370,7 @@
         </div>
         <div class="card-panel">
           <h3>Info</h3>
-          <p class="setting-info">StudyCards v1.8<br>Lerne deine Obsidian-Notizen mit Spaced Repetition.</p>
+          <p class="setting-info">StudyCards v1.9<br>Lerne deine Obsidian-Notizen mit Spaced Repetition.</p>
         </div>
       </div>
       <nav class="bottom-nav">
@@ -383,6 +391,10 @@
 
     <!-- Toast Notification -->
     <div id="toast" class="toast hidden"></div>
+    <div id="lightbox" class="lightbox hidden">
+      <button class="lightbox-close" aria-label="Schließen">✕</button>
+      <div class="lightbox-scroll"><img id="lightbox-img" alt=""></div>
+    </div>
 
   </div>
   <script src="app.js"></script>

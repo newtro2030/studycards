@@ -2,7 +2,7 @@
 // StudyCards - Service Worker v1.3
 // ============================================================
 
-const CACHE_NAME = 'studycards-v1.8';
+const CACHE_NAME = 'studycards-v1.9';
 
 // App-Shell: Dateien die sofort gecached werden (relativ zum SW-Scope)
 const APP_SHELL = [
@@ -35,7 +35,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME)
+          .filter((key) => key !== CACHE_NAME && key !== 'studycards-img') // Bild-Cache behalten
           .map((key) => caches.delete(key))
       );
     }).then(() => {
