@@ -564,7 +564,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.9 ✓');
+        this.showToast('App aktualisiert auf v1.10 ✓');
       }
     },
 
