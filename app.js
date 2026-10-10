@@ -98,7 +98,11 @@
       let currentA = [];
       let collecting = null; // 'q' or 'a'
 
-      for (const line of lines) {
+      for (const rawLine of lines) {
+        // Aus Word/Web eingefügter Text: führende &#x20;/&nbsp; und Hard-Break-Backslash am Zeilenende entfernen
+        const line = rawLine
+          .replace(/^(?:\s|&#x20;|&#32;|&nbsp;|\u00a0)+/i, '')
+          .replace(/\s*\\$/, '');
         const qMatch = line.match(/^Q:\s*(.+)/);
         const aMatch = line.match(/^A:\s*(.+)/);
 
@@ -506,7 +510,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.7 ✓');
+        this.showToast('App aktualisiert auf v1.8 ✓');
       }
     },
 
