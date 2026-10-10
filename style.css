@@ -442,6 +442,15 @@ body {
   padding-bottom: 4px;
 }
 
+.folder-filter {
+  margin-bottom: 10px;
+}
+
+.folder-chip {
+  border-radius: 10px;
+  font-weight: 700;
+}
+
 .tag-filter::-webkit-scrollbar {
   display: none;
 }

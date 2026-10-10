@@ -78,10 +78,12 @@
       const match = sectionRegex.exec(markdown);
       if (!match) return cards;
 
-      // Extract hashtags from header line: ## Lernkarten #BWL #Finanzen
+      // Extract hashtags from header line: ## Lernkarten #Semester-4/Rechnernetze #BWL
+      // Verschachtelte Tags: vor dem "/" steht der Ordner, danach das Fach
       const tagString = match[1] || '';
-      const tags = (tagString.match(/#([a-zA-ZäöüÄÖÜß0-9_-]+)/g) || [])
-        .map(t => t.slice(1)); // Remove # prefix
+      const tags = (tagString.match(/#([a-zA-ZäöüÄÖÜß0-9_\/-]+)/g) || [])
+        .map(t => t.slice(1).replace(/^\/+|\/+$/g, '')) // Remove # prefix and stray slashes
+        .filter(Boolean);
 
       // Get content after ## Lernkarten until next ## or end
       const afterSection = markdown.slice(match.index + match[0].length);
@@ -470,6 +472,7 @@
     isFlipped: false,
     currentDeckFilter: null,
     currentTagFilter: null,
+    currentFolderFilter: null,
 
     // ----- Config Validation -----
     _validateConfig(config) {
@@ -503,7 +506,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.6 ✓');
+        this.showToast('App aktualisiert auf v1.7 ✓');
       }
     },
 
@@ -734,32 +737,109 @@
     },
 
     // ----- Tag Filter -----
+    // Tag "Semester-4/Rechnernetze" → Ordner "Semester-4", Fach "Rechnernetze"
+    // Tag ohne "/" → Ordner "" (Allgemein)
+    _splitTag(tag) {
+      const idx = tag.lastIndexOf('/');
+      return idx === -1
+        ? { folder: '', subject: tag }
+        : { folder: tag.slice(0, idx), subject: tag.slice(idx + 1) };
+    },
+
+    _cardFolders(card) {
+      if (card.tags.length === 0) return [''];
+      return card.tags.map(t => this._splitTag(t).folder);
+    },
+
+    _folderLabel(folder) {
+      return folder ? folder.replace(/[-_]/g, ' ').replace(/\//g, ' › ') : 'Allgemein';
+    },
+
     _getFilteredCards() {
-      if (!this.currentTagFilter) return this.allCards;
-      return this.allCards.filter(c => c.tags.includes(this.currentTagFilter));
+      let cards = this.allCards;
+      if (this.currentFolderFilter !== null) {
+        cards = cards.filter(c => this._cardFolders(c).includes(this.currentFolderFilter));
+      }
+      if (this.currentTagFilter) {
+        cards = cards.filter(c => c.tags.includes(this.currentTagFilter));
+      }
+      return cards;
     },
 
     _renderTagFilter() {
-      const container = document.getElementById('tag-filter');
-      // Collect all unique tags
-      const allTags = new Set();
-      this.allCards.forEach(c => c.tags.forEach(t => allTags.add(t)));
+      this._renderFolderRow();
+      this._renderSubjectRow();
+    },
 
-      if (allTags.size === 0) {
+    _renderFolderRow() {
+      const container = document.getElementById('folder-filter');
+      const folders = new Set();
+      this.allCards.forEach(c => this._cardFolders(c).forEach(f => folders.add(f)));
+
+      // Ordner-Zeile nur zeigen, wenn es echte Ordner gibt
+      if (![...folders].some(Boolean)) {
+        this.currentFolderFilter = null;
         container.innerHTML = '';
         container.classList.add('hidden');
         return;
       }
+      if (this.currentFolderFilter !== null && !folders.has(this.currentFolderFilter)) {
+        this.currentFolderFilter = null;
+      }
 
       container.classList.remove('hidden');
-      const sorted = [...allTags].sort((a, b) => a.localeCompare(b, 'de'));
+      // Benannte Ordner alphabetisch, "Allgemein" ans Ende
+      const sorted = [...folders].sort((a, b) => {
+        if (!a) return 1;
+        if (!b) return -1;
+        return a.localeCompare(b, 'de', { numeric: true });
+      });
+
+      container.innerHTML =
+        `<button class="tag-chip folder-chip ${this.currentFolderFilter === null ? 'active' : ''}" data-all="1">Alle Ordner</button>` +
+        sorted.map(folder => {
+          const isActive = this.currentFolderFilter === folder;
+          return `<button class="tag-chip folder-chip ${isActive ? 'active' : ''}" data-folder="${escapeHTML(folder)}">${escapeHTML(this._folderLabel(folder))}</button>`;
+        }).join('');
+
+      container.querySelectorAll('.tag-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.currentFolderFilter = btn.dataset.all ? null : btn.dataset.folder;
+          this.currentTagFilter = null;
+          this._renderDashboard();
+        });
+      });
+    },
+
+    _renderSubjectRow() {
+      const container = document.getElementById('tag-filter');
+      // Nur Fächer des gewählten Ordners anbieten
+      const subjects = new Map(); // tag → Anzeigename
+      this.allCards.forEach(c => c.tags.forEach(t => {
+        const { folder, subject } = this._splitTag(t);
+        if (this.currentFolderFilter === null || this.currentFolderFilter === folder) {
+          subjects.set(t, subject);
+        }
+      }));
+
+      if (subjects.size === 0) {
+        this.currentTagFilter = null;
+        container.innerHTML = '';
+        container.classList.add('hidden');
+        return;
+      }
+      if (this.currentTagFilter && !subjects.has(this.currentTagFilter)) {
+        this.currentTagFilter = null;
+      }
+
+      container.classList.remove('hidden');
+      const sorted = [...subjects.entries()].sort((a, b) => a[1].localeCompare(b[1], 'de'));
 
       container.innerHTML =
         `<button class="tag-chip ${!this.currentTagFilter ? 'active' : ''}" data-tag="">Alle</button>` +
-        sorted.map(tag => {
-          const safeTag = escapeHTML(tag);
+        sorted.map(([tag, subject]) => {
           const isActive = this.currentTagFilter === tag;
-          return `<button class="tag-chip ${isActive ? 'active' : ''}" data-tag="${safeTag}">${safeTag}</button>`;
+          return `<button class="tag-chip ${isActive ? 'active' : ''}" data-tag="${escapeHTML(tag)}">${escapeHTML(subject)}</button>`;
         }).join('');
 
       container.querySelectorAll('.tag-chip').forEach(btn => {
