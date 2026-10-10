@@ -564,7 +564,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.11 ✓');
+        this.showToast('App aktualisiert auf v1.12 ✓');
       }
     },
 
@@ -1309,6 +1309,11 @@
     navigator.serviceWorker.register(basePath + 'sw.js').then((reg) => {
       // Prüfe regelmäßig auf Updates (alle 30 Min)
       setInterval(() => reg.update(), 30 * 60 * 1000);
+      // iOS holt Home-Screen-Apps meist nur aus dem Hintergrund statt neu zu laden →
+      // beim Zurückkehren in die App ebenfalls nach Updates suchen
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
 
       // Neuer Service Worker wartet → Update-Toast zeigen
       const showUpdateToast = (worker) => {
