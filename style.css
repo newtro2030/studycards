@@ -642,19 +642,35 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
-  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-style: preserve-3d;
 }
 
-.flashcard.flipped .flashcard-inner {
-  transform: rotateY(180deg);
+/* Flache Dreh-Animation (scaleX) statt 3D-rotateY: iOS-WebKit scrollt nicht in
+   3D-transformierten Elementen. Nach der Animation bleibt keine Transformation zurück. */
+.flashcard-inner.flip-out {
+  animation: cardFlipOut 0.15s ease-in forwards;
+}
+
+.flashcard-inner.flip-in {
+  animation: cardFlipIn 0.15s ease-out;
+}
+
+@keyframes cardFlipOut {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@keyframes cardFlipIn {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.flashcard.flipped .flashcard-front {
+  display: none;
 }
 
 .flashcard-front, .flashcard-back {
   position: absolute;
   inset: 0;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -662,10 +678,16 @@ body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .flashcard-back {
-  transform: rotateY(180deg);
+  display: none;
+}
+
+.flashcard.flipped .flashcard-back {
+  display: flex;
 }
 
 .flashcard-label {
@@ -682,7 +704,7 @@ body {
   flex: 1;
   font-size: 18px;
   line-height: 1.6;
-  overflow-y: auto;
+  flex: 1 0 auto;
   word-wrap: break-word;
   display: flex;
   flex-direction: column;

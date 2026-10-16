@@ -1,6 +1,6 @@
 # StudyCards — Architektur & Technologie
 
-Stand: **v1.14**
+Stand: **v1.16**
 
 ---
 
@@ -241,7 +241,8 @@ Fetch-Strategien:
 
 Update-Wege:
   1. Automatisch:  Start / App in den Vordergrund / alle 30 Min → reg.update()
-                   → neuer SW wartet → Hinweis „Neue Version verfügbar“ [Aktualisieren] [✕]
+                   → neuer SW installiert → still aktivieren (kein Hinweisbalken)
+                   → während einer Lernsitzung zurückgehalten, bis der Lern-Screen verlassen wird
   2. Manuell:      Einstellungen → „Nach Updates suchen“
                    → liest APP_VERSION vom Server (no-store) → bei neuer Version:
                      App-Caches löschen → SKIP_WAITING → Reload
@@ -273,3 +274,5 @@ Update-Wege:
 | **v1.12** | Update-Check beim Zurückkehren in die App (iOS) |
 | **v1.13** | Update-Hinweis zuverlässig, mit ✕ schließbar |
 | **v1.14** | „Nach Updates suchen“ in den Einstellungen, HTTP-Cache umgangen |
+| **v1.15** | Multiple-Choice-Karten über Obsidian-Checkboxen (`- [x]` / `- [ ]`) |
+| **v1.16** | Stille Auto-Updates statt Hinweisbalken; flache Karten-Animation statt 3D (Scrollen auf iOS) |

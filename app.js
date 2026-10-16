@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.15'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.16'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -821,6 +821,7 @@
 
     // ----- Screen Management -----
     showScreen(name) {
+      this.currentScreen = name;
       document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
       const screen = document.getElementById(name + '-screen');
       if (screen) {
@@ -836,6 +837,13 @@
       if (name === 'dashboard') this._renderDashboard();
       if (name === 'stats') this._renderStats();
       if (name === 'settings') this._renderSettings();
+
+      // Während des Lernens zurückgehaltenes Update jetzt einspielen
+      if (name !== 'study' && this._pendingUpdate) {
+        const apply = this._pendingUpdate;
+        this._pendingUpdate = null;
+        apply();
+      }
     },
 
     // ----- Dashboard -----
@@ -1102,7 +1110,7 @@
 
       // Reset flip
       this.isFlipped = false;
-      document.getElementById('flashcard').classList.remove('flipped');
+      this._setFlipped(false, false);
       document.getElementById('show-answer-container').classList.remove('hidden');
       document.getElementById('rating-container').classList.add('hidden');
 
@@ -1206,7 +1214,7 @@
       const card = this._currentCard();
       if (card?.options) this._renderMcResult(card);
       this.isFlipped = true;
-      document.getElementById('flashcard').classList.add('flipped');
+      this._setFlipped(true);
       document.getElementById('show-answer-container').classList.add('hidden');
       document.getElementById('rating-container').classList.remove('hidden');
     },
@@ -1214,9 +1222,32 @@
     _unflipCard() {
       if (!this.isFlipped) return;
       this.isFlipped = false;
-      document.getElementById('flashcard').classList.remove('flipped');
+      this._setFlipped(false);
       document.getElementById('show-answer-container').classList.remove('hidden');
       document.getElementById('rating-container').classList.add('hidden');
+    },
+
+    // Seite wechseln: halb zusammenklappen → Seite tauschen → aufklappen
+    _setFlipped(flipped, animate = true) {
+      const card = document.getElementById('flashcard');
+      const inner = document.getElementById('flashcard-inner');
+      const apply = () => {
+        card.classList.toggle('flipped', flipped);
+        card.querySelectorAll('.flashcard-front, .flashcard-back').forEach(f => { f.scrollTop = 0; });
+      };
+      clearTimeout(this._flipTimer);
+      inner.classList.remove('flip-out', 'flip-in');
+      if (!animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        apply();
+        return;
+      }
+      inner.classList.add('flip-out');
+      this._flipTimer = setTimeout(() => {
+        inner.classList.remove('flip-out');
+        apply();
+        inner.classList.add('flip-in');
+        this._flipTimer = setTimeout(() => inner.classList.remove('flip-in'), 160);
+      }, 150);
     },
 
     _rateCard(quality) {
@@ -1442,56 +1473,27 @@
         if (document.visibilityState === 'visible') reg.update().catch(() => {});
       });
 
-      // Neuer Service Worker wartet → Update-Toast zeigen
-      const showUpdateToast = () => {
-        const toast = document.getElementById('toast');
-        toast.textContent = '';
-
-        const msg = document.createElement('span');
-        msg.textContent = 'Neue Version verfügbar! ';
-
-        const btn = document.createElement('button');
-        btn.textContent = 'Aktualisieren';
-        btn.style.cssText = 'background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:8px;margin-left:8px;font-weight:600;cursor:pointer;';
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          btn.disabled = true;
-          btn.textContent = 'Lädt …';
-          // Immer den AKTUELL wartenden Worker nehmen – der beim Anzeigen gemerkte kann
-          // inzwischen von einer noch neueren Version abgelöst (redundant) sein
-          const waiting = reg.waiting;
-          if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
-          // Fallback: Kommt kein controllerchange, trotzdem neu laden (App-Dateien sind Network-First)
-          setTimeout(() => window.location.reload(), waiting ? 3000 : 0);
-        });
-
-        const close = document.createElement('button');
-        close.textContent = '✕';
-        close.setAttribute('aria-label', 'Hinweis schließen');
-        close.style.cssText = 'background:none;color:var(--text-secondary);border:none;padding:4px 8px;margin-left:4px;font-size:15px;cursor:pointer;';
-        close.addEventListener('click', (e) => {
-          e.stopPropagation();
-          toast.classList.remove('show');
-          toast.classList.add('hidden');
-        });
-
-        toast.appendChild(msg);
-        toast.appendChild(btn);
-        toast.appendChild(close);
-        toast.classList.remove('hidden');
-        toast.classList.add('show');
-        // Kein Auto-Hide — User soll bewusst klicken
+      // Neue Version installiert → still aktivieren (kein Hinweisbalken mehr).
+      // Nie mitten in einer Lernsitzung: dann erst beim Verlassen des Lern-Screens.
+      const applyUpdate = () => {
+        if (!reg.waiting) return;
+        sessionStorage.setItem('sc_updated', '1');
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' }); // → controllerchange → Reload
+      };
+      const onUpdateReady = () => {
+        if (App.currentScreen === 'study') App._pendingUpdate = applyUpdate;
+        else applyUpdate();
       };
 
-      if (reg.waiting) {
-        showUpdateToast();
+      if (reg.waiting && navigator.serviceWorker.controller) {
+        onUpdateReady();
       }
 
       reg.addEventListener('updatefound', () => {
         const newWorker = reg.installing;
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            showUpdateToast();
+            onUpdateReady();
           }
         });
       });
@@ -1501,7 +1503,6 @@
 
     // Wenn neuer SW aktiviert wird → Seite neu laden
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      sessionStorage.setItem('sc_updated', '1');
       window.location.reload();
     });
   }

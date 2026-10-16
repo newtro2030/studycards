@@ -2,7 +2,7 @@
 
 Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Spaced Repetition.
 
-![Version](https://img.shields.io/badge/version-1.14-7c3aed)
+![Version](https://img.shields.io/badge/version-1.16-7c3aed)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Desktop-brightgreen)
 
@@ -14,7 +14,8 @@ Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Sp
 - **Bilder & Screenshots** — Obsidian-Embeds `![[bild.png]]` in Frage und Antwort, Vollbild mit Pinch-Zoom
 - **Private Repos** — Optionaler GitHub-Token (nur Lesezugriff) für nicht-öffentliche Notizen
 - **Offline-fähig** — PWA mit Service Worker; Karten-Bilder werden zwischengespeichert
-- **Einfache Updates** — Automatischer Hinweis oder „Nach Updates suchen“ in den Einstellungen
+- **Multiple Choice** — Obsidian-Checkboxen `- [x]` / `- [ ]` unter einer Frage werden zur MC-Aufgabe
+- **Automatische Updates** — Still im Hintergrund, nie mitten in einer Lernsitzung; manuell über „Nach Updates suchen“
 - **LaTeX-Support** — Mathematische Formeln via KaTeX
 - **Gamification** — XP, Levels, Streaks für Lernmotivation
 - **Dark Mode** — Mobile-first Design, optimiert für iPhone (Hoch- und Querformat)
@@ -92,7 +93,7 @@ Der Token wird nur lokal auf dem Gerät gespeichert und erlaubt ausschließlich 
 
 ## Updates
 
-Die App sucht beim Öffnen automatisch nach neuen Versionen und zeigt dann einen Hinweis. Alternativ: *Einstellungen → Info → Nach Updates suchen*. Lernfortschritt, Token und Bild-Cache bleiben bei Updates erhalten.
+Die App sucht beim Öffnen automatisch nach neuen Versionen und spielt sie still ein – während einer Lernsitzung erst, wenn du sie verlässt. Sofort aktualisieren: *Einstellungen → Info → Nach Updates suchen*. Lernfortschritt, Token und Bild-Cache bleiben bei Updates erhalten.
 
 ## Architektur
 
