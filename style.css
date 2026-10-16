@@ -1017,6 +1017,11 @@ body {
   margin-bottom: 12px;
 }
 
+.update-status {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 select {
   background: var(--bg-elevated);
   color: var(--text);

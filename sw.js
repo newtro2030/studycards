@@ -2,7 +2,7 @@
 // StudyCards - Service Worker v1.3
 // ============================================================
 
-const CACHE_NAME = 'studycards-v1.13';
+const CACHE_NAME = 'studycards-v1.14';
 
 // App-Shell: Dateien die sofort gecached werden (relativ zum SW-Scope)
 const APP_SHELL = [
@@ -83,8 +83,10 @@ self.addEventListener('fetch', (event) => {
   }
 
   // App-Dateien → Network-First (immer neueste Version holen, Fallback auf Cache)
+  // cache: 'no-cache' → beim Server nachfragen statt GitHub Pages' 10-Minuten-HTTP-Cache zu nutzen
+  const isSameOriginGet = event.request.method === 'GET' && url.origin === self.location.origin;
   event.respondWith(
-    fetch(event.request)
+    (isSameOriginGet ? fetch(url.href, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(event.request))
       .then((response) => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));

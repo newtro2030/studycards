@@ -66,6 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
+  const APP_VERSION = 'v1.14'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -564,7 +565,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.13 ✓');
+        this.showToast(`App aktualisiert auf ${APP_VERSION} ✓`);
       }
     },
 
@@ -669,6 +670,8 @@
         this.showScreen('setup');
         this._populateSetup();
       });
+
+      document.getElementById('btn-check-update').addEventListener('click', () => this._checkForUpdate());
 
       document.getElementById('btn-reset-progress').addEventListener('click', () => {
         if (confirm('Fortschritt wirklich zurücksetzen? Alle Lernstände gehen verloren!')) {
@@ -1275,8 +1278,47 @@
       box.classList.remove('hidden');
     },
 
+    // ----- App-Update (manuell) -----
+    async _checkForUpdate() {
+      const btn = document.getElementById('btn-check-update');
+      const status = document.getElementById('update-status');
+      const setStatus = (text) => { status.textContent = text; status.classList.remove('hidden'); };
+      btn.disabled = true;
+      setStatus('Suche nach Updates …');
+
+      try {
+        // Neueste Version direkt vom Server lesen, an allen Caches vorbei
+        const res = await fetch(`app.js?check=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(res.status);
+        const latest = ((await res.text()).match(/const APP_VERSION = '([^']+)'/) || [])[1];
+
+        const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+        if (reg) await reg.update().catch(() => {});
+
+        if (!latest || (latest === APP_VERSION && !(reg && reg.waiting))) {
+          setStatus(`✓ Du hast die neueste Version (${APP_VERSION}).`);
+          btn.disabled = false;
+          return;
+        }
+
+        setStatus(`Aktualisiere auf ${latest} …`);
+        // Alte App-Caches löschen (Bild-Cache bleibt), damit garantiert die neuen Dateien geladen werden
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.filter(k => k.startsWith('studycards-v')).map(k => caches.delete(k)));
+        }
+        sessionStorage.setItem('sc_updated', '1');
+        if (reg && reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' }); // löst controllerchange → Reload aus
+        setTimeout(() => window.location.reload(), 1500); // Fallback
+      } catch {
+        setStatus('Keine Verbindung – bitte später erneut versuchen.');
+        btn.disabled = false;
+      }
+    },
+
     // ----- Settings Screen -----
     _renderSettings() {
+      document.getElementById('app-version').textContent = APP_VERSION;
       if (!this.config) return;
       document.getElementById('settings-owner').textContent = this.config.owner;
       document.getElementById('settings-repo').textContent = this.config.repo;
