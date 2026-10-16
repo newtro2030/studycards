@@ -2,7 +2,7 @@
 
 Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Spaced Repetition.
 
-![Version](https://img.shields.io/badge/version-1.4-7c3aed)
+![Version](https://img.shields.io/badge/version-1.14-7c3aed)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Desktop-brightgreen)
 
@@ -10,18 +10,24 @@ Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Sp
 
 - **Spaced Repetition (SM-2)** — Optimierte Wiederholungs-Intervalle für langfristiges Behalten
 - **Obsidian-Integration** — Liest `Q:/A:`-Karteikarten direkt aus Markdown-Dateien
-- **Tag-basierte Filterung** — Karten nach Fächern gruppieren (`## Lernkarten #Rechnernetze`)
-- **Offline-fähig** — PWA mit Service Worker, funktioniert ohne Internet
+- **Ordner & Fächer** — Karten per Tag gruppieren (`## Lernkarten #Semester-4/Rechnernetze`)
+- **Bilder & Screenshots** — Obsidian-Embeds `![[bild.png]]` in Frage und Antwort, Vollbild mit Pinch-Zoom
+- **Private Repos** — Optionaler GitHub-Token (nur Lesezugriff) für nicht-öffentliche Notizen
+- **Offline-fähig** — PWA mit Service Worker; Karten-Bilder werden zwischengespeichert
+- **Einfache Updates** — Automatischer Hinweis oder „Nach Updates suchen“ in den Einstellungen
 - **LaTeX-Support** — Mathematische Formeln via KaTeX
 - **Gamification** — XP, Levels, Streaks für Lernmotivation
-- **Dark Mode** — Mobile-first Design, optimiert für iPhone
+- **Dark Mode** — Mobile-first Design, optimiert für iPhone (Hoch- und Querformat)
 
 ## Schnellstart
 
-1. Erstelle ein öffentliches GitHub-Repository mit deinen Obsidian-Notizen
+1. Lege ein GitHub-Repository mit deinen Obsidian-Notizen an
 2. Öffne [newtro2030.github.io/studycards](https://newtro2030.github.io/studycards/)
-3. Gib deinen GitHub-Benutzernamen und Repository-Namen ein
-4. Fertig — Karten werden automatisch geladen
+3. Gib GitHub-Benutzernamen und Repository-Namen ein
+4. **Privates Repo?** Zusätzlich einen GitHub-Token eintragen (siehe unten)
+5. Fertig — Karten werden automatisch geladen
+
+Tipp: Über *Teilen → Zum Home-Bildschirm* wird StudyCards zur App auf dem Handy.
 
 ## Kartenformat
 
@@ -32,13 +38,17 @@ Füge einen `## Lernkarten`-Abschnitt in eine beliebige `.md`-Datei ein:
 
 Normaler Obsidian-Inhalt...
 
-## Lernkarten #Modulname
+## Lernkarten #Semester-4/Datenbanken
+
+Q: Wofür steht ACID?
+A: **Atomarität**, **Konsistenz**, **Isolation**, **Dauerhaftigkeit**
 
 Q: Was ist die Kapitalwertmethode?
 A: Die Summe aller auf den Zeitpunkt $t_0$ abgezinsten Cashflows.
 
-Q: Wofür steht ACID?
-A: **Atomarität**, **Konsistenz**, **Isolation**, **Dauerhaftigkeit**
+Q: Wie ist das Wasserfallmodell aufgebaut?
+A: Sequenzielle Phasen, die nacheinander durchlaufen werden.
+![[wasserfallmodell.png]]
 ```
 
 ### Unterstützte Formatierung
@@ -52,22 +62,43 @@ A: **Atomarität**, **Konsistenz**, **Isolation**, **Dauerhaftigkeit**
 | LaTeX (inline) | `$formel$` |
 | LaTeX (block) | `$$formel$$` |
 | Tabellen | Standard-Markdown |
+| Bilder | `![[bild.png]]` oder `![alt](pfad/bild.png)` |
 
-### Tags
+Bilder (`png`, `jpg`, `gif`, `webp`, `svg`) werden im Repo per Dateiname gefunden — Obsidians Standard-Linkformat „kürzester Pfad“ funktioniert direkt. Tipp aufs Bild öffnet die Vollbildansicht.
 
-Hashtags im Header gruppieren Karten nach Fächern:
+### Ordner & Fächer
+
+Tags im Header gruppieren Karten. Vor dem `/` steht der Ordner, danach das Fach:
 
 ```markdown
-## Lernkarten #Rechnernetze           → Tag: Rechnernetze
-## Lernkarten #BWL #Finanzierung      → Tags: BWL, Finanzierung
-## Lernkarten                          → Keine Tags (funktioniert auch)
+## Lernkarten #Semester-4/Rechnernetze    → Ordner „Semester 4“, Fach „Rechnernetze“
+## Lernkarten #Semester-5/BWL #Semester-5/Recht   → Mehrere Fächer
+## Lernkarten #Englisch                   → Ohne Ordner → „Allgemein“
+## Lernkarten                             → Keine Tags (funktioniert auch)
 ```
+
+Obsidian zeigt verschachtelte Tags im Tag-Bereich ebenfalls als Ordner an.
+
+## Private Repositories
+
+Für private Repos braucht StudyCards einen **Fine-grained Personal Access Token**:
+
+1. [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+2. **Repository access:** *Only select repositories* → dein Karten-Repo
+3. **Permissions → Contents:** *Read-only*
+4. Token kopieren und in StudyCards unter *Einstellungen → Repository ändern → GitHub-Token* eintragen
+
+Der Token wird nur lokal auf dem Gerät gespeichert und erlaubt ausschließlich Lesezugriff auf das gewählte Repo.
+
+## Updates
+
+Die App sucht beim Öffnen automatisch nach neuen Versionen und zeigt dann einen Hinweis. Alternativ: *Einstellungen → Info → Nach Updates suchen*. Lernfortschritt, Token und Bild-Cache bleiben bei Updates erhalten.
 
 ## Architektur
 
 ```
 Obsidian → Obsidian Git Plugin → GitHub Repo → StudyCards PWA
-                (auto-push)        (Quelle)      (Browser)
+                (auto-push)       (Quelle)       (Browser)
 ```
 
 Siehe [ARCHITEKTUR.md](ARCHITEKTUR.md) für eine detaillierte technische Dokumentation.
@@ -78,7 +109,7 @@ Siehe [ARCHITEKTUR.md](ARCHITEKTUR.md) für eine detaillierte technische Dokumen
 |-----------|-------------|
 | Frontend | Vanilla HTML/CSS/JS |
 | Hosting | GitHub Pages |
-| Offline | Service Worker (PWA) |
+| Offline | Service Worker (PWA) + Cache API |
 | Daten | localStorage |
 | LaTeX | KaTeX |
 | API | GitHub REST API v3 |
@@ -96,9 +127,10 @@ npx http-server -p 8080
 ## Obsidian-Sync einrichten
 
 1. Installiere das [Obsidian Git Plugin](https://github.com/denolehov/obsidian-git)
-2. Erstelle ein öffentliches GitHub-Repository
+2. Verbinde den Vault mit einem GitHub-Repository (privat empfohlen)
 3. Konfiguriere Auto-Push (empfohlen: alle 10 Minuten)
-4. Füge `## Lernkarten` mit `Q:/A:`-Paaren in deine Notizen ein
+4. Optional: *Einstellungen → Dateien & Links → Ordnerpfad für Anhänge* setzen, damit Screenshots gesammelt in einem Ordner landen
+5. Füge `## Lernkarten` mit `Q:/A:`-Paaren in deine Notizen ein
 
 ## Lizenz
 
