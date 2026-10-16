@@ -1334,3 +1334,121 @@ select:focus {
   color: #fff;
   font-size: 18px;
 }
+
+/* ===== Multiple Choice ===== */
+.mc-options,
+.mc-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  text-align: left;
+}
+
+.mc-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.mc-option.selected {
+  border-color: var(--accent);
+  background: rgba(124, 58, 237, 0.15);
+}
+
+.mc-box {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 2px solid var(--text-muted);
+  border-radius: 5px;
+}
+
+.mc-option.selected .mc-box {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--bg-elevated);
+}
+
+.mc-text p {
+  margin: 0;
+}
+
+.mc-text small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mc-summary {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.mc-summary.perfect {
+  color: #10b981;
+}
+
+.mc-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.mc-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.mc-result.hit { border-color: #10b981; background: rgba(16, 185, 129, 0.12); }
+.mc-result.hit .mc-icon { background: #10b981; }
+.mc-result.hit small { color: #10b981; }
+
+.mc-result.wrong { border-color: #ef4444; background: rgba(239, 68, 68, 0.12); }
+.mc-result.wrong .mc-icon { background: #ef4444; }
+.mc-result.wrong small { color: #ef4444; }
+
+.mc-result.missed { border-color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+.mc-result.missed .mc-icon { background: #f59e0b; }
+.mc-result.missed small { color: #f59e0b; }
+
+.mc-result.skip { color: var(--text-secondary); }
+.mc-result.skip .mc-icon { border: 2px solid var(--border); }
+
+.mc-explanation {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Vorgeschlagene Bewertung nach MC-Auswertung */
+.btn-rate.suggested {
+  box-shadow: 0 0 0 2px currentColor;
+}

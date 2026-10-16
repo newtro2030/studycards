@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.14'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.15'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -100,7 +100,17 @@
       const lines = sectionContent.split('\n');
       let currentQ = null;
       let currentA = [];
+      let currentOpts = []; // Multiple-Choice: { text, correct }
       let collecting = null; // 'q' or 'a'
+
+      // Normale Karte braucht eine Antwort, MC-Karte mindestens zwei Optionen
+      const pushCard = () => {
+        if (!currentQ) return;
+        if (currentA.length > 0 || currentOpts.length >= 2) {
+          cards.push(this._makeCard(currentQ, currentA.join('\n').trim(), filePath, fileName, tags,
+            currentOpts.length >= 2 ? currentOpts : null));
+        }
+      };
 
       for (const rawLine of lines) {
         // Aus Word/Web eingefügter Text: führende &#x20;/&nbsp; und Hard-Break-Backslash am Zeilenende entfernen
@@ -109,14 +119,16 @@
           .replace(/\s*\\$/, '');
         const qMatch = line.match(/^Q:\s*(.+)/);
         const aMatch = line.match(/^A:\s*(.+)/);
+        // Obsidian-Checkboxen unter der Frage = Multiple-Choice-Optionen: "- [x] richtig" / "- [ ] falsch"
+        const optMatch = collecting === 'q' && line.match(/^[-*+]\s+\[([ xX])\]\s+(.+)/);
 
-        if (qMatch) {
-          // Save previous card
-          if (currentQ && currentA.length > 0) {
-            cards.push(this._makeCard(currentQ, currentA.join('\n').trim(), filePath, fileName, tags));
-          }
+        if (optMatch) {
+          currentOpts.push({ text: optMatch[2].trim(), correct: optMatch[1] !== ' ' });
+        } else if (qMatch) {
+          pushCard(); // Save previous card
           currentQ = qMatch[1].trim();
           currentA = [];
+          currentOpts = [];
           collecting = 'q';
         } else if (aMatch) {
           currentA = [aMatch[1].trim()];
@@ -133,14 +145,12 @@
       }
 
       // Save last card
-      if (currentQ && currentA.length > 0) {
-        cards.push(this._makeCard(currentQ, currentA.join('\n').trim(), filePath, fileName, tags));
-      }
+      pushCard();
 
       return cards;
     },
 
-    _makeCard(question, answer, filePath, fileName, tags) {
+    _makeCard(question, answer, filePath, fileName, tags, options = null) {
       // ID nur aus der ersten Fragezeile → Fortschritt bleibt erhalten, wenn z.B. ein Bild ergänzt wird
       const id = hashString(filePath + '::' + question.split('\n')[0]);
       return {
@@ -150,6 +160,7 @@
         source: filePath,
         deck: fileName,
         tags: tags || [],
+        options, // null = normale Karte, sonst Multiple-Choice
       };
     },
 
@@ -649,8 +660,12 @@
       document.getElementById('btn-back-study').addEventListener('click', () => this.showScreen('dashboard'));
       document.getElementById('btn-show-answer').addEventListener('click', () => this._flipCard());
       document.getElementById('flashcard').addEventListener('click', () => {
-        if (!this.isFlipped) this._flipCard();
-        else this._unflipCard();
+        if (!this.isFlipped) {
+          // Bei Multiple-Choice erst auswählen, dann bewusst "Prüfen" tippen
+          if (!this._currentCard()?.options) this._flipCard();
+        } else {
+          this._unflipCard();
+        }
       });
 
       // Rating buttons
@@ -1103,6 +1118,10 @@
       questionEl.innerHTML = Parser.renderMarkdown(card.question);
       answerEl.innerHTML = Parser.renderMarkdown(card.answer);
 
+      document.querySelectorAll('.btn-rate.suggested').forEach(b => b.classList.remove('suggested'));
+      document.getElementById('btn-show-answer').textContent = card.options ? 'Prüfen' : 'Antwort zeigen';
+      if (card.options) this._renderMcOptions(card, questionEl);
+
       // Render LaTeX
       this._renderKaTeX(questionEl);
       this._renderKaTeX(answerEl);
@@ -1118,8 +1137,74 @@
       document.getElementById('interval-easy').textContent = formatInterval(previews[5]);
     },
 
+    _currentCard() {
+      return this.studyQueue[this.studyIndex] || null;
+    },
+
+    // ----- Multiple Choice -----
+    _renderMcOptions(card, questionEl) {
+      // Reihenfolge jedes Mal neu mischen, damit man sich nicht die Position merkt
+      const order = card.options.map((_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      this.mcOrder = order;
+      this.mcSelected = new Set();
+
+      const list = document.createElement('div');
+      list.className = 'mc-options';
+      order.forEach(i => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mc-option';
+        btn.dataset.i = i;
+        btn.innerHTML = `<span class="mc-box"></span><span class="mc-text">${Parser.renderMarkdown(card.options[i].text)}</span>`;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation(); // Auswahl soll die Karte nicht umdrehen
+          if (this.mcSelected.has(i)) this.mcSelected.delete(i); else this.mcSelected.add(i);
+          btn.classList.toggle('selected', this.mcSelected.has(i));
+        });
+        list.appendChild(btn);
+      });
+      questionEl.appendChild(list);
+      list.querySelectorAll('.mc-text').forEach(el => this._renderKaTeX(el));
+    },
+
+    _renderMcResult(card) {
+      const answerEl = document.getElementById('card-answer');
+      let right = 0;
+      const rows = this.mcOrder.map(i => {
+        const opt = card.options[i];
+        const picked = this.mcSelected.has(i);
+        const ok = picked === opt.correct;
+        if (ok) right++;
+        // ✓ richtig angekreuzt · ✗ falsch angekreuzt · ! übersehen · leer: richtig weggelassen
+        const state = opt.correct ? (picked ? 'hit' : 'missed') : (picked ? 'wrong' : 'skip');
+        const icon = { hit: '✓', wrong: '✗', missed: '!', skip: '' }[state];
+        const hint = { hit: 'richtig', wrong: 'falsch angekreuzt', missed: 'übersehen', skip: '' }[state];
+        return `<div class="mc-result ${state}"><span class="mc-icon">${icon}</span>` +
+          `<span class="mc-text">${Parser.renderMarkdown(opt.text)}${hint ? `<small>${hint}</small>` : ''}</span></div>`;
+      }).join('');
+
+      const total = card.options.length;
+      const perfect = right === total;
+      answerEl.innerHTML =
+        `<p class="mc-summary ${perfect ? 'perfect' : ''}">${perfect ? 'Alles richtig! 🎉' : `${right} von ${total} Aussagen richtig beurteilt`}</p>` +
+        `<div class="mc-results">${rows}</div>` +
+        (card.answer ? `<div class="mc-explanation">${Parser.renderMarkdown(card.answer)}</div>` : '');
+      this._renderKaTeX(answerEl);
+      this._hydrateImages(answerEl);
+
+      // Bewertung vorschlagen – entscheiden darf der Nutzer trotzdem selbst
+      document.querySelectorAll('.btn-rate.suggested').forEach(b => b.classList.remove('suggested'));
+      document.querySelector(`.btn-rate[data-quality="${perfect ? 4 : 1}"]`)?.classList.add('suggested');
+    },
+
     _flipCard() {
       if (this.isFlipped) return;
+      const card = this._currentCard();
+      if (card?.options) this._renderMcResult(card);
       this.isFlipped = true;
       document.getElementById('flashcard').classList.add('flipped');
       document.getElementById('show-answer-container').classList.add('hidden');
