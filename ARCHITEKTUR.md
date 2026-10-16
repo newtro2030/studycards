@@ -46,7 +46,7 @@ Die App selbst liegt in einem **öffentlichen** Repo (Voraussetzung für GitHub 
 | Komponente | Technologie | Begründung |
 |-----------|-------------|------------|
 | **Frontend** | Vanilla HTML/CSS/JS | Kein Framework nötig, schnell, kein Build-Step |
-| **Hosting** | GitHub Pages (Branch `main`) | Kostenlos, Deployment bei jedem Push |
+| **Hosting** | GitHub Pages (Branch `main`, Root) | Kostenlos, kein Workflow nötig — jeder Push auf `main` wird automatisch veröffentlicht |
 | **PWA** | Service Worker + Manifest | Offline-fähig, Home-Screen-Installation |
 | **Persistenz** | `localStorage` | Kein Server nötig, Daten bleiben auf dem Gerät |
 | **Bild-Cache** | Cache API (`studycards-img`) | Bilder offline verfügbar, übersteht App-Updates |
@@ -74,9 +74,7 @@ studycards/                    ← Öffentliches Repo (App)
 ├── .gitignore
 ├── LICENSE                    ← MIT
 ├── README.md
-├── ARCHITEKTUR.md             ← Diese Datei
-└── .github/workflows/
-    └── deploy.yml             ← GitHub Pages Deployment
+└── ARCHITEKTUR.md             ← Diese Datei
 
 studium-cards/                 ← Separates, privates Repo (Kartenquelle)
 ├── 02_Wissen/
