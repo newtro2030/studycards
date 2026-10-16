@@ -564,7 +564,7 @@
       // Update-Bestätigung nach Reload
       if (sessionStorage.getItem('sc_updated')) {
         sessionStorage.removeItem('sc_updated');
-        this.showToast('App aktualisiert auf v1.12 ✓');
+        this.showToast('App aktualisiert auf v1.13 ✓');
       }
     },
 
@@ -1316,7 +1316,7 @@
       });
 
       // Neuer Service Worker wartet → Update-Toast zeigen
-      const showUpdateToast = (worker) => {
+      const showUpdateToast = () => {
         const toast = document.getElementById('toast');
         toast.textContent = '';
 
@@ -1328,25 +1328,43 @@
         btn.style.cssText = 'background:var(--accent);color:#fff;border:none;padding:4px 12px;border-radius:8px;margin-left:8px;font-weight:600;cursor:pointer;';
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          worker.postMessage({ type: 'SKIP_WAITING' });
+          btn.disabled = true;
+          btn.textContent = 'Lädt …';
+          // Immer den AKTUELL wartenden Worker nehmen – der beim Anzeigen gemerkte kann
+          // inzwischen von einer noch neueren Version abgelöst (redundant) sein
+          const waiting = reg.waiting;
+          if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
+          // Fallback: Kommt kein controllerchange, trotzdem neu laden (App-Dateien sind Network-First)
+          setTimeout(() => window.location.reload(), waiting ? 3000 : 0);
+        });
+
+        const close = document.createElement('button');
+        close.textContent = '✕';
+        close.setAttribute('aria-label', 'Hinweis schließen');
+        close.style.cssText = 'background:none;color:var(--text-secondary);border:none;padding:4px 8px;margin-left:4px;font-size:15px;cursor:pointer;';
+        close.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toast.classList.remove('show');
+          toast.classList.add('hidden');
         });
 
         toast.appendChild(msg);
         toast.appendChild(btn);
+        toast.appendChild(close);
         toast.classList.remove('hidden');
         toast.classList.add('show');
         // Kein Auto-Hide — User soll bewusst klicken
       };
 
       if (reg.waiting) {
-        showUpdateToast(reg.waiting);
+        showUpdateToast();
       }
 
       reg.addEventListener('updatefound', () => {
         const newWorker = reg.installing;
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            showUpdateToast(newWorker);
+            showUpdateToast();
           }
         });
       });
