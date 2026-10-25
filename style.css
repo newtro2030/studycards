@@ -629,7 +629,6 @@ body {
   padding: 12px 16px;
   perspective: 1000px;
   min-height: 0;
-  max-height: calc(100vh - 230px);
 }
 
 .flashcard {
@@ -1500,4 +1499,11 @@ select:focus {
 /* Vorgeschlagene Bewertung nach MC-Auswertung */
 .btn-rate.suggested {
   box-shadow: 0 0 0 2px currentColor;
+}
+
+/* Normale Karte: Platz für die Bewertungsknöpfe freihalten (unsichtbar), damit die
+   Karte beim Umdrehen nicht springt – die restliche Höhe nutzt die Karte */
+.study-actions.reserve #rating-container.hidden {
+  display: block !important;
+  visibility: hidden;
 }
