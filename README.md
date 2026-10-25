@@ -2,7 +2,7 @@
 
 Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Spaced Repetition.
 
-![Version](https://img.shields.io/badge/version-1.16-7c3aed)
+![Version](https://img.shields.io/badge/version-1.17-7c3aed)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Desktop-brightgreen)
 

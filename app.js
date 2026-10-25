@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.16'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.17'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -659,6 +659,12 @@
       // Study
       document.getElementById('btn-back-study').addEventListener('click', () => this.showScreen('dashboard'));
       document.getElementById('btn-show-answer').addEventListener('click', () => this._flipCard());
+      document.getElementById('flashcard').addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.id === 'flashcard') {
+          e.preventDefault();
+          e.currentTarget.click();
+        }
+      });
       document.getElementById('flashcard').addEventListener('click', () => {
         if (!this.isFlipped) {
           // Bei Multiple-Choice erst auswählen, dann bewusst "Prüfen" tippen
@@ -1111,7 +1117,9 @@
       // Reset flip
       this.isFlipped = false;
       this._setFlipped(false, false);
-      document.getElementById('show-answer-container').classList.remove('hidden');
+      document.getElementById('flashcard').classList.toggle('is-mc', !!card.options);
+      // Normale Karten werden per Tap umgedreht – den Knopf braucht nur Multiple Choice ("Prüfen")
+      document.getElementById('show-answer-container').classList.toggle('hidden', !card.options);
       document.getElementById('rating-container').classList.add('hidden');
 
       // Progress
@@ -1223,7 +1231,7 @@
       if (!this.isFlipped) return;
       this.isFlipped = false;
       this._setFlipped(false);
-      document.getElementById('show-answer-container').classList.remove('hidden');
+      document.getElementById('show-answer-container').classList.toggle('hidden', !this._currentCard()?.options);
       document.getElementById('rating-container').classList.add('hidden');
     },
 

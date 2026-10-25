@@ -698,6 +698,33 @@ body {
   color: var(--accent-light);
   margin-bottom: 16px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Umdreh-Symbol oben rechts ersetzt den "Antwort zeigen"-Knopf */
+.flip-icon {
+  color: var(--text-muted);
+  opacity: 0.8;
+  transition: transform 0.3s, color 0.2s;
+}
+
+/* Nur bei echter Maus – auf dem iPhone bliebe :hover nach dem Tippen "hängen" */
+@media (hover: hover) {
+  .flashcard:hover .flip-icon {
+    color: var(--accent-light);
+    transform: rotate(180deg);
+  }
+}
+
+.flashcard:focus-visible .flip-icon {
+  color: var(--accent-light);
+}
+
+/* MC-Vorderseite dreht sich nicht per Tap (erst auswählen, dann "Prüfen") */
+.flashcard.is-mc:not(.flipped) .flashcard-front .flip-icon {
+  display: none;
 }
 
 .flashcard-content {

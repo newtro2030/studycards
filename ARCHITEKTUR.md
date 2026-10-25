@@ -1,6 +1,6 @@
 # StudyCards — Architektur & Technologie
 
-Stand: **v1.16**
+Stand: **v1.17**
 
 ---
 
@@ -276,3 +276,4 @@ Update-Wege:
 | **v1.14** | „Nach Updates suchen“ in den Einstellungen, HTTP-Cache umgangen |
 | **v1.15** | Multiple-Choice-Karten über Obsidian-Checkboxen (`- [x]` / `- [ ]`) |
 | **v1.16** | Stille Auto-Updates statt Hinweisbalken; flache Karten-Animation statt 3D (Scrollen auf iOS) |
+| **v1.17** | „Antwort zeigen“-Knopf entfernt: Karte per Tap umdrehen, Umdreh-Symbol oben rechts (MC behält „Prüfen“) |
