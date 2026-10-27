@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.19'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.20'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -815,7 +815,7 @@
         let mdFiles = tree.filter(f => f.path.endsWith('.md'));
         if (folder) {
           const prefix = folder.endsWith('/') ? folder : folder + '/';
-          mdFiles = tree.filter(f => f.path.startsWith(prefix));
+          mdFiles = mdFiles.filter(f => f.path.startsWith(prefix));
         }
 
         // DoS-Schutz: Datei-Anzahl begrenzen

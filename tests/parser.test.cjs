@@ -65,3 +65,28 @@ test('empty answers do not create ordinary cards', () => {
 test('fenced examples outside learning sections cannot create cards', () => {
   assert.equal(parse('```md\n## Lernkarten\nQ: Beispiel?\nA: Beispiel.\n```').length, 0);
 });
+
+test('folder import fetches only Markdown and retains the image index', async () => {
+  const appContext = { console, localStorage: { setItem() {} } };
+  vm.runInNewContext(source.slice(0, source.indexOf('  // ===== SERVICE WORKER & PWA =====')) +
+    'globalThis.App = App; globalThis.GitHub = GitHub;})();', appContext);
+  const { App, GitHub } = appContext;
+  const requested = [];
+  GitHub.fetchTree = async () => [
+    { path: '02_Wissen/Test.md', sha: 'note' },
+    { path: '02_Wissen/assets/bild.png', sha: 'image' },
+    { path: '02_Wissen/Quelle.pdf', sha: 'pdf' },
+    { path: 'AndererOrdner/Test.md', sha: 'other' },
+  ];
+  GitHub.fetchFile = async (_owner, _repo, _branch, file) => {
+    requested.push(file);
+    return '## Lernkarten #MPP2/Test\nQ: Frage?\nA: Antwort.';
+  };
+  App.config = { owner: 'example', repo: 'cards', branch: 'main', folder: '02_Wissen' };
+  App.showScreen = () => {};
+  App.showToast = message => assert.fail(message);
+  await App.loadCards();
+  assert.deepEqual(requested, ['02_Wissen/Test.md']);
+  assert.equal(App.allCards.length, 1);
+  assert.equal(App.imageIndex.get('bild.png').path, '02_Wissen/assets/bild.png');
+});
