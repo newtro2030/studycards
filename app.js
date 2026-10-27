@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.18'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.19'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -76,77 +76,112 @@
     extractCards(markdown, filePath) {
       const cards = [];
       const fileName = filePath.split('/').pop().replace(/\.md$/, '');
-
-      // Find ## Lernkarten section (case insensitive), optionally with #tags
-      const sectionRegex = /^##\s+Lernkarten?\s*(.*)?$/im;
-      const match = sectionRegex.exec(markdown);
-      if (!match) return cards;
-
-      // Extract hashtags from header line: ## Lernkarten #Semester-4/Rechnernetze #BWL
-      // Verschachtelte Tags: vor dem "/" steht der Ordner, danach das Fach
-      const tagString = match[1] || '';
-      const tags = (tagString.match(/#([a-zA-ZäöüÄÖÜß0-9_\/-]+)/g) || [])
-        .map(t => t.slice(1).replace(/^\/+|\/+$/g, '')) // Remove # prefix and stray slashes
-        .filter(Boolean);
-
-      // Get content after ## Lernkarten until next ## or end
-      const afterSection = markdown.slice(match.index + match[0].length);
-      const nextHeadingMatch = afterSection.match(/^##\s+/m);
-      const sectionContent = nextHeadingMatch
-        ? afterSection.slice(0, nextHeadingMatch.index)
-        : afterSection;
-
-      // Parse Q: / A: pairs
-      const lines = sectionContent.split('\n');
+      let tags = null; // null = außerhalb eines Lernkartenabschnitts
       let currentQ = null;
       let currentA = [];
-      let currentOpts = []; // Multiple-Choice: { text, correct }
-      let collecting = null; // 'q' or 'a'
+      let currentOpts = [];
+      let collecting = null;
+      let fence = null;
+      let inComment = false;
 
-      // Normale Karte braucht eine Antwort, MC-Karte mindestens zwei Optionen
       const pushCard = () => {
-        if (!currentQ) return;
-        if (currentA.length > 0 || currentOpts.length >= 2) {
-          cards.push(this._makeCard(currentQ, currentA.join('\n').trim(), filePath, fileName, tags,
+        const answer = currentA.join('\n').trim();
+        if (currentQ && (answer || currentOpts.length >= 2)) {
+          cards.push(this._makeCard(currentQ, answer, filePath, fileName, tags,
             currentOpts.length >= 2 ? currentOpts : null));
         }
       };
 
-      for (const rawLine of lines) {
-        // Aus Word/Web eingefügter Text: führende &#x20;/&nbsp; und Hard-Break-Backslash am Zeilenende entfernen
-        const line = rawLine
+      const appendLine = (line) => {
+        if (collecting === 'q' && line.trim()) {
+          currentQ += '\n' + line;
+        } else if (collecting === 'a' && (line.trim() || currentA.length)) {
+          currentA.push(line);
+        }
+      };
+
+      // Quellenkommentare bleiben wie in Markdown unsichtbar. Codebeispiele
+      // durchlaufen diese Funktion nicht, damit HTML-Kommentare darin erhalten bleiben.
+      const withoutComments = (line) => {
+        let visible = '';
+        let offset = 0;
+        while (offset < line.length) {
+          if (inComment) {
+            const end = line.indexOf('-->', offset);
+            if (end < 0) break;
+            inComment = false;
+            offset = end + 3;
+          } else {
+            const start = line.indexOf('<!--', offset);
+            if (start < 0) {
+              visible += line.slice(offset);
+              break;
+            }
+            visible += line.slice(offset, start);
+            inComment = true;
+            offset = start + 4;
+          }
+        }
+        return visible;
+      };
+
+      for (const rawLine of markdown.split(/\r?\n/)) {
+        // Innerhalb von Codeblöcken sind Q:, A: und ## normaler Beispieltext.
+        if (fence) {
+          const end = rawLine.trim().match(/^(`{3,}|~{3,})\s*$/);
+          if (tags !== null) appendLine(rawLine);
+          if (end && end[1][0] === fence[0] && end[1].length >= fence.length) fence = null;
+          continue;
+        }
+
+        const visible = withoutComments(rawLine);
+        const line = visible
           .replace(/^(?:\s|&#x20;|&#32;|&nbsp;|\u00a0)+/i, '')
           .replace(/\s*\\$/, '');
+        const startFence = line.match(/^(`{3,}|~{3,})/);
+        if (startFence) {
+          fence = startFence[1];
+          if (tags !== null) appendLine(visible);
+          continue;
+        }
+
+        const heading = line.match(/^##[ \t]+(.+)$/);
+        if (heading) {
+          pushCard();
+          currentQ = null;
+          currentA = [];
+          currentOpts = [];
+          collecting = null;
+          const section = heading[1].match(/^Lernkarten?(?:[ \t]+(.*))?$/i);
+          tags = section
+            ? ((section[1] || '').match(/#([a-zA-ZäöüÄÖÜß0-9_\/-]+)/g) || [])
+              .map(t => t.slice(1).replace(/^\/+|\/+$/g, '')).filter(Boolean)
+            : null;
+          continue;
+        }
+        if (tags === null) continue;
+
         const qMatch = line.match(/^Q:\s*(.+)/);
-        const aMatch = line.match(/^A:\s*(.+)/);
-        // Obsidian-Checkboxen unter der Frage = Multiple-Choice-Optionen: "- [x] richtig" / "- [ ] falsch"
+        const aMatch = line.match(/^A:\s*(.*)$/); // Antwort darf in der nächsten Zeile beginnen
         const optMatch = collecting === 'q' && line.match(/^[-*+]\s+\[([ xX])\]\s+(.+)/);
 
         if (optMatch) {
           currentOpts.push({ text: optMatch[2].trim(), correct: optMatch[1] !== ' ' });
         } else if (qMatch) {
-          pushCard(); // Save previous card
+          pushCard();
           currentQ = qMatch[1].trim();
           currentA = [];
           currentOpts = [];
           collecting = 'q';
-        } else if (aMatch) {
-          currentA = [aMatch[1].trim()];
+        } else if (aMatch && currentQ) {
+          currentA = aMatch[1].trim() ? [aMatch[1].trim()] : [];
           collecting = 'a';
-        } else if (collecting === 'q' && line.trim() !== '') {
-          // Mehrzeilige Frage, z.B. Bild unter der Frage
-          currentQ += '\n' + line;
-        } else if (collecting === 'a' && line.trim() !== '') {
-          currentA.push(line);
-        } else if (collecting === 'a' && line.trim() === '' && currentA.length > 0) {
-          // Empty line in answer - keep it for multi-paragraph answers
-          currentA.push('');
+        } else {
+          appendLine(line);
         }
       }
 
-      // Save last card
       pushCard();
-
       return cards;
     },
 

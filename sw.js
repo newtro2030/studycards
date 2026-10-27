@@ -2,7 +2,7 @@
 // StudyCards - Service Worker v1.3
 // ============================================================
 
-const CACHE_NAME = 'studycards-v1.18';
+const CACHE_NAME = 'studycards-v1.19';
 
 // App-Shell: Dateien die sofort gecached werden (relativ zum SW-Scope)
 const APP_SHELL = [
