@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.26'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.27'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -1623,6 +1623,8 @@
     notice: '',
     returnTo: 'dashboard',
     _timer: null,
+    isLeader: false,    // F11: nur der steuernde Tab verarbeitet Phasenenden, Signal und Protokoll
+    channel: null,
 
     PHASE_LABELS: { work: 'Lernzeit', shortBreak: 'Kurze Pause', longBreak: 'Lange Pause' },
     START_LABELS: { work: 'Lernphase starten', shortBreak: 'Kurze Pause starten', longBreak: 'Lange Pause starten' },
@@ -1640,8 +1642,10 @@
       this.sessions = read('sessions') || [];
       this.state = read('state') || P.createInitialState();
 
+      this._initTabs();
       // F04: abgelaufene Phasen beim Öffnen sofort verarbeiten (ohne Ton: das Ende liegt zurück)
-      this._apply(P.restore(this.state, { now: Date.now(), profile: this.profile() }), { silent: true });
+      this._mutate(st => P.restore(st, { now: Date.now(), profile: this.profile() }), { silent: true })
+        .then(() => this._refreshViews());
 
       document.querySelectorAll('[data-open-pomodoro]').forEach(btn =>
         btn.addEventListener('click', () => this.open()));
@@ -1717,18 +1721,98 @@
       App._maybeApplyUpdate(); // Phase beendet/zurückgesetzt → zurückgehaltenes Update ggf. jetzt
     },
 
-    _act(fn) {
-      const res = fn(this.state);
-      if (res.error === 'review-pending') {
+    async _act(fn) {
+      const res = await this._mutate(fn, { clearNotice: true });
+      if (res && res.error === 'review-pending') {
         this._setNotice('Bitte zuerst den Abschluss der letzten Lerneinheit prüfen.');
-        return this.render();
       }
-      this.notice = '';
-      this._apply(res);
+      this._refreshViews();
+    },
+
+    _refreshViews() {
       this._syncTimer();
-      this.render();
+      if (App.currentScreen === 'pomodoro') this.render();
+      if (App.currentScreen === 'settings') this.renderSettings();
+      if (App.currentScreen === 'stats') this.renderStats();
       this.renderTile();
       this.renderMini();
+    },
+
+    // ----- Mehrere Tabs (F11, E4) -----
+    // Jede Zustandsänderung läuft unter einer Web-Lock-Sperre und beginnt mit dem
+    // aktuellen gespeicherten Stand – so ergibt auch ein fast gleichzeitiger Start in
+    // zwei Tabs nur einen Timer. Andere Tabs werden per BroadcastChannel/storage informiert.
+    _initTabs() {
+      if ('BroadcastChannel' in window) {
+        this.channel = new BroadcastChannel('studycards-pomodoro');
+        this.channel.onmessage = (e) => this._onRemote(e.data);
+      }
+      // Fallback ohne BroadcastChannel: storage-Ereignis feuert in den anderen Tabs
+      window.addEventListener('storage', (e) => {
+        if (e.key && e.key.startsWith('sc_pomodoro_')) this._onRemote({ type: 'changed' });
+      });
+      if (navigator.locks) {
+        // Sperre bleibt bis zum Schließen des Tabs gehalten; danach übernimmt ein anderer Tab
+        navigator.locks.request('studycards-pomodoro-leader', () => {
+          this.isLeader = true;
+          this._tick();
+          return new Promise(() => {});
+        });
+      } else {
+        this.isLeader = true;
+      }
+    },
+
+    async _mutate(fn, { silent = false, clearNotice = false } = {}) {
+      const run = () => {
+        this._reload();
+        const res = fn(this.state);
+        if (!res.error) {
+          if (clearNotice) this.notice = '';
+          this._apply(res, { silent });
+        }
+        return res;
+      };
+      return navigator.locks ? navigator.locks.request('studycards-pomodoro-write', run) : run();
+    },
+
+    // Aktuellen Stand aus dem Speicher übernehmen (beschädigte Bereiche bleiben im Speicher)
+    _reload() {
+      const P = window.Pomodoro;
+      for (const kind of ['settings', 'state', 'sessions']) {
+        if (this.corrupt.includes(kind)) continue;
+        let raw = null;
+        try { raw = localStorage.getItem(P.STORAGE_KEYS[kind]); } catch { continue; }
+        const res = P.parse(kind, raw);
+        if (res.ok && res.value !== null) this[kind] = res.value;
+      }
+    },
+
+    // Mehrere Speichervorgänge in einem Schritt → eine Nachricht
+    _broadcastChanged() {
+      if (this._changeQueued) return;
+      this._changeQueued = true;
+      queueMicrotask(() => {
+        this._changeQueued = false;
+        this._broadcast({ type: 'changed' });
+      });
+    },
+
+    _broadcast(msg) {
+      if (this.channel) this.channel.postMessage(msg);
+    },
+
+    _onRemote(msg) {
+      if (!msg) return;
+      if (msg.type === 'notice') {
+        // Sichtbarer Hinweis auch in anderen Tabs – Ton/Mitteilung nur im verarbeitenden Tab
+        this._setNotice(msg.text);
+        document.getElementById('pomo-announce').textContent = msg.text;
+        if (App.currentScreen !== 'pomodoro' && App.currentScreen !== 'study') App.showToast(msg.text);
+      }
+      this._reload();
+      this._refreshViews();
+      App._maybeApplyUpdate();
     },
 
     _onMain() {
@@ -1764,6 +1848,7 @@
         text = `${this.PHASE_LABELS[event.phase]} beendet. Nächste Lernphase ist bereit.`;
       }
       this._setNotice(text);
+      this._broadcast({ type: 'notice', text });
       document.getElementById('pomo-announce').textContent = text; // für Screenreader
       if (App.currentScreen !== 'pomodoro' && App.currentScreen !== 'study') App.showToast(text);
       this.renderMini();
@@ -1807,13 +1892,17 @@
       }
     },
 
-    _tick() {
-      if (this.state.status === 'running') {
-        const res = window.Pomodoro.tick(this.state, { now: Date.now(), profile: this.profile() });
-        if (res.state !== this.state) {
-          this._apply(res);
-          this._syncTimer();
+    async _tick() {
+      // Nur der steuernde Tab verarbeitet das Ende – genau einmal (F11)
+      if (this.isLeader && !this._processing && this.state.status === 'running' && Date.now() >= this.state.endsAt) {
+        this._processing = true;
+        try {
+          await this._mutate(st => window.Pomodoro.tick(st, { now: Date.now(), profile: this.profile() }));
+        } finally {
+          this._processing = false;
         }
+        this._refreshViews();
+        return;
       }
       if (App.currentScreen === 'pomodoro') this.render();
       if (App.currentScreen === 'dashboard') this.renderTile();
@@ -1826,6 +1915,7 @@
       try {
         localStorage.setItem(window.Pomodoro.STORAGE_KEYS[kind], window.Pomodoro.serialize(data));
         this.saveFailed = false;
+        this._broadcastChanged();
       } catch {
         this.saveFailed = true;
       }

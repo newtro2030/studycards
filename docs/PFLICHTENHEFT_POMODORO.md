@@ -184,3 +184,32 @@ Ergänzungen und Präzisierungen nach Prüfung des Konzepts gegen den aktuellen 
 | E4 | Mehrere Tabs | Die Steuerung „nur ein Timer“ (F11) nutzt die Web Locks API; der Abgleich zwischen Tabs erfolgt über `BroadcastChannel`. |
 | E5 | Werte | Die Grundeinstellungen und Grenzwerte aus Abschnitt 2 (25/5/15, vier Einheiten) sind freigegeben. |
 | E6 | Zurück-Pfeil | Der Zurück-Pfeil im Kartenlernen beendet die Kartenrunde („bewusstes Verlassen“). Nur der Wechsel zum Timer hält die Runde offen. |
+
+## 10 Abnahme-Checkliste (Umsetzung v1.27)
+
+Grundlage sind die Prüfungen aus Abschnitt 7 und die Entscheidungen E1–E6. Die Spalte „Vorab geprüft“ beschreibt, was während der Entwicklung bereits automatisiert (`node --test tests/`) oder im Test-Browser (Chromium, 375 und 1440 px) geprüft wurde. Die Abnahme selbst erfolgt in den drei Zielumgebungen.
+
+**Kurze Testzeiten:** Einstellungen → Pomodoro · Zeitprofil → Individuell → 1 / 1 / 1 Minuten, 2 Einheiten. Danach wieder auf Standard umstellen.
+
+**Getestete Versionen:** macOS ______ · Safari ______ · Chrome ______ · iOS ______ (StudyCards als Home-Screen-App)
+
+| Nr. | Prüfung | Vorab geprüft | Safari (Mac) | Chrome (Mac) | iPhone |
+| --- | --- | --- | --- | --- | --- |
+| A1 | **Einstieg:** Kachel auf Home; 25/5/15 und 4 Einheiten voreingestellt; Start mit einem Klick; Timer auch ohne Repository-Verbindung (Setup → „Pomodoro-Timer öffnen“) | Browser | ☐ | ☐ | ☐ |
+| A2 | **Eigenes Profil:** 50/10/20/3 speichern, nach Neuladen vorhanden; 0, leer, 181 abgelehnt mit Hinweis; Wechsel Standard ↔ Individuell erhält eigene Werte | Tests + Browser | ☐ | ☐ | ☐ |
+| A3 | **Pausieren und Änderungen:** Restzeit steht bei Pause; Fortsetzen; Profiländerung ändert laufende Phase nicht | Tests + Browser | ☐ | ☐ | ☐ |
+| A4 | **Zyklus:** nach 4 Lerneinheiten lange Pause; Ende/Überspringen setzt Zyklus zurück; Abbruch erhöht nicht; nächste Phase wartet auf Start | Tests + Browser | ☐ | ☐ | ☐ |
+| A5 | **Ton:** „Ton testen“ hörbar; Lautstärke 0–100 % wirkt; Ton aus = still; Phasenende genau einmal hörbar | Browser (erzeugt, nicht gehört) | ☐ | ☐ | ☐ |
+| A6 | **Ton blockiert:** bei blockierter Wiedergabe Hinweis, Timer bleibt bedienbar | nicht nachstellbar | ☐ | ☐ | ☐ |
+| A7 | **Mitteilungen:** „Mitteilungen aktivieren“ fragt einmal; erlaubt → Mitteilung bei Phasenende, wenn die App nicht im Vordergrund ist; abgelehnt → Status „blockiert“, keine erneute Anfrage; Klick auf Mitteilung öffnet die App | nur „blockiert“ | ☐ | ☐ | ☐ (nur Home-Screen-App) |
+| A8 | **Hintergrund und Wiederöffnung:** nach Tabwechsel stimmt die Restzeit; laufend/pausiert bleibt nach Neuladen erhalten; abgelaufene Lernphase → „Abschluss prüfen“; abgelaufene Pause startet nichts | Tests + Browser | ☐ | ☐ | ☐ (auch Bildschirm sperren) |
+| A9 | **Verlauf und Tageswechsel:** 2 × 25 min = 2 Einheiten / 50 min; Abbrüche und ungeklärte Einheiten zählen nicht; Einheit über Mitternacht zählt zum Folgetag | Tests + Browser | ☐ | ☐ | ☐ |
+| A10 | **Doppelte Ereignisse und Tabs:** Neuladen/mehrfaches Ende → ein Eintrag; Start in zwei Tabs fast gleichzeitig → ein Timer; Ende → ein Ton, ein Eintrag; steuernden Tab schließen → anderer Tab übernimmt | Tests + Browser (2 Tabs) | ☐ | ☐ | – |
+| A11 | **Speicherung und Sicherung:** Verlauf nach Neustart vorhanden; Export enthält keine Karten/Token; Import stellt her und setzt Zyklus auf 0; ungültiger Import ändert nichts; Import/Löschen bei aktiver Phase gesperrt; beschädigte Daten werden nicht überschrieben | Tests + Browser | ☐ | ☐ | ☐ (Export über Teilen-Menü) |
+| A12 | **Kartenintegration:** Kartenlernen ohne Timer möglich; Karte → Timer → zurück: gleiche Karte, gleiche Seite; Phasenende ändert keine Bewertung, Intervalle oder XP; Verlauf löschen erhält Kartenfortschritt | Browser | ☐ | ☐ | ☐ |
+| A13 | **App-Update:** Update wird nicht eingespielt bei aktiver Kartenrunde oder laufender/pausierter/ungeklärter Phase – auf keinem Screen; danach automatisch | Browser (simuliert) | ☐ | ☐ | ☐ |
+| A14 | **Bedienbarkeit:** Tastatur und sichtbarer Fokus; VoiceOver liest Phase/Zustände, kündigt Phasenende an, liest nicht jede Sekunde; „Bewegung reduzieren“; Kontraste; kein horizontales Scrollen bei 375 und 1440 px | Browser (Tastatur, Kontraste, Breiten) | ☐ | ☐ | ☐ (VoiceOver) |
+
+**Bekannte Grenzen (keine Mängel):** Bei geschlossenem Tab, beendetem Browser, schlafendem Mac oder gesperrtem iPhone gibt es kein pünktliches Signal (Abschnitt 6); die Lernphase wird dann beim Öffnen zu „Abschluss prüfen“. Jede Home-Screen-App und jedes Browserprofil hat einen eigenen Verlauf.
+
+**Abnahme erteilt:** ☐ ja ☐ mit Auflagen ______ · Datum ______

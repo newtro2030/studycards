@@ -1,6 +1,6 @@
 # StudyCards — Architektur & Technologie
 
-Stand: **v1.18**
+Stand: **v1.27**
 
 ---
 
@@ -63,8 +63,9 @@ Die App selbst liegt in einem **öffentlichen** Repo (Voraussetzung für GitHub 
 studycards/                    ← Öffentliches Repo (App)
 ├── index.html                 ← HTML-Struktur (Screens, Lightbox) + CSP + SRI
 ├── style.css                  ← Dark Mode, Animationen, Mobile-First, Querformat
-├── app.js                     ← App-Logik (~1400 Zeilen), APP_VERSION
-├── sw.js                      ← Service Worker (Caching, Updates), CACHE_NAME
+├── app.js                     ← App-Logik inkl. Pomodoro-Oberfläche (~2400 Zeilen), APP_VERSION
+├── pomodoro.js                ← Pomodoro-Logik ohne Oberfläche (Zustand, Zählregeln, Statistik, Sicherung)
+├── sw.js                      ← Service Worker (Caching, Updates, Mitteilungs-Klick), CACHE_NAME
 ├── manifest.json              ← PWA-Manifest
 ├── icons/
 │   ├── icon.svg               ← Quell-Icon
@@ -74,7 +75,12 @@ studycards/                    ← Öffentliches Repo (App)
 ├── .gitignore
 ├── LICENSE                    ← MIT
 ├── README.md
-└── ARCHITEKTUR.md             ← Diese Datei
+├── ARCHITEKTUR.md             ← Diese Datei
+├── docs/
+│   └── PFLICHTENHEFT_POMODORO.md  ← Anforderungen, Entscheidungen, Abnahme
+└── tests/
+    ├── parser.test.cjs        ← Kartenparser
+    └── pomodoro.test.cjs      ← Pomodoro-Logik (feste Uhr, Zeitzone Europe/Berlin)
 
 studium-cards/                 ← Separates, privates Repo (Kartenquelle)
 ├── 02_Wissen/
@@ -242,7 +248,8 @@ Fetch-Strategien:
 Update-Wege:
   1. Automatisch:  Start / App in den Vordergrund / alle 30 Min → reg.update()
                    → neuer SW installiert → still aktivieren (kein Hinweisbalken)
-                   → während einer Lernsitzung zurückgehalten, bis der Lern-Screen verlassen wird
+                   → zurückgehalten, solange eine Kartenrunde aktiv ist oder eine Pomodoro-Phase
+                     läuft, pausiert ist oder auf „Abschluss prüfen“ wartet – auf jedem Screen
   2. Manuell:      Einstellungen → „Nach Updates suchen“
                    → liest APP_VERSION vom Server (no-store) → bei neuer Version:
                      App-Caches löschen → SKIP_WAITING → Reload
@@ -255,7 +262,62 @@ Update-Wege:
 
 ---
 
-## 11. Versionshistorie
+## 11. Pomodoro
+
+Spezifikation: [docs/PFLICHTENHEFT_POMODORO.md](docs/PFLICHTENHEFT_POMODORO.md).
+
+**Aufteilung**
+
+| Teil | Datei | Aufgabe |
+|------|-------|---------|
+| Logik | `pomodoro.js` (`window.Pomodoro`, in Node per `require`) | Zustandsautomat, Zyklus, „Abschluss prüfen“, Protokoll, Statistik nach lokalem Kalendertag, Speicherformat, Sicherung. Reine Funktionen mit übergebener Uhrzeit → getestet in `tests/pomodoro.test.cjs` |
+| Oberfläche | `app.js` (`PomodoroUI`, `PomodoroSound`, `PomodoroNotify`) | Laden/Speichern, Takt, Timer-Screen, Kachel, Leiste im Lernmodus, Statistik, Einstellungen, Tabs |
+
+**Zustand** (`sc_pomodoro_state`)
+
+```
+phase:  work | shortBreak | longBreak        status: idle | running | paused | review
+idle ──Start──▶ running ──Pause──▶ paused ──Fortsetzen──▶ running
+running ──Ende pünktlich (≤ 10 s)──▶ idle (nächste Phase vorbereitet, Lerneinheit protokolliert)
+running ──Ende später erkannt (Lernphase)──▶ review ──Abgeschlossen/Abgebrochen──▶ idle
+```
+
+- Restzeit immer aus `endsAt` berechnet (nicht heruntergezählt); die Dauer wird beim Start festgeschrieben.
+- Takt (250 ms) nur während `running`; bei `visibilitychange` sofortiger Abgleich.
+- Nach 4 (einstellbar) Lerneinheiten lange Pause; deren Ende/Überspringen setzt den Zyklus auf 0.
+
+**Speicherbereiche** (getrennt von den Kartendaten, versioniert als `{ version, data }`)
+
+| Schlüssel | Inhalt |
+|-----------|--------|
+| `sc_pomodoro_settings` | Profil (Standard/Individuell + eigene Werte), Ton, Lautstärke, Mitteilungen |
+| `sc_pomodoro_state` | aktuelle Phase und Zyklusstand |
+| `sc_pomodoro_sessions` | Protokoll: Kennung, Start, Ende, geplante/erfasste Dauer, Status, Thema |
+
+Beschädigte Bereiche werden erkannt und **nicht überschrieben**, bis eine Sicherung importiert oder der Bereich bestätigt zurückgesetzt wird. Die Sicherung (JSON, `format: studycards-pomodoro-backup`) enthält nur Einstellungen und abgeschlossene/abgebrochene Einheiten – keine Karten, kein Token, keine aktive Phase.
+
+**Mehrere Tabs (F11)**
+
+```
+Web Lock „studycards-pomodoro-leader“  → genau ein Tab steuert (Phasenende, Signal, Protokoll);
+                                         wird er geschlossen, übernimmt ein anderer
+Web Lock „studycards-pomodoro-write“   → jede Änderung: Stand neu lesen → ändern → speichern
+BroadcastChannel „studycards-pomodoro“ → andere Tabs laden neu und zeigen den Hinweis (ohne Ton)
+storage-Ereignis                       → Fallback ohne BroadcastChannel
+```
+
+**Signal und Mitteilungen**
+
+- Töne per Web Audio erzeugt (Glocke, Gong; < 5 s), Freischaltung im Klick (Safari/iOS). Ein Signal pro Endereignis; beim Öffnen erkannte Abläufe bleiben still.
+- Mitteilungen nur nach ausdrücklicher Erlaubnis, über `registration.showNotification` (iOS: nur Home-Screen-App); Klick holt die App per Service Worker nach vorne.
+
+**Verbindung zum Kartenlernen:** Die Kartenrunde ist ein Zustand (`App.studyActive`). Der Weg zum Timer hält sie offen (gleiche Karte, gleiche Seite, keine neue Mischung); Zurück-Pfeil oder Rundenende beenden sie. Phasenenden verändern weder Bewertung noch Intervalle oder XP.
+
+> Grenzen: Browser drosseln Hintergrund-Tabs; bei geschlossenem Tab, beendetem Browser, schlafendem Mac oder gesperrtem iPhone gibt es kein pünktliches Signal. Die Lernphase landet dann beim Öffnen in „Abschluss prüfen“.
+
+---
+
+## 12. Versionshistorie
 
 | Version | Änderungen |
 |---------|------------|
@@ -278,3 +340,12 @@ Update-Wege:
 | **v1.16** | Stille Auto-Updates statt Hinweisbalken; flache Karten-Animation statt 3D (Scrollen auf iOS) |
 | **v1.17** | „Antwort zeigen“-Knopf entfernt: Karte per Tap umdrehen, Umdreh-Symbol oben rechts (MC behält „Prüfen“) |
 | **v1.18** | Karte nutzt die volle Bildschirmhöhe; Platz für Bewertungsknöpfe wird reserviert (kein Springen beim Umdrehen) |
+| **v1.19** | Mehrere Lernkarten-Abschnitte pro Datei, mehrzeilige Antworten; Parser-Tests |
+| **v1.20** | Anhänge werden beim ordnerbasierten Import ausgeschlossen |
+| **v1.21** | Pomodoro: Timer-Screen und Kachel, auch ohne geladene Karten erreichbar |
+| **v1.22** | Pomodoro: Leiste im Lernmodus, Kartenrunde bleibt beim Timer-Besuch erhalten; zustandsbasierte Update-Sperre |
+| **v1.23** | Pomodoro: Signalton (Web Audio) und optionale Systemmitteilungen |
+| **v1.24** | Pomodoro: Statistik (heute, 7 Tage, Tagesübersicht, Verlauf) |
+| **v1.25** | Pomodoro: Zeitprofil, Sicherung/Import, Verlauf löschen, Umgang mit beschädigten Daten |
+| **v1.26** | Kompakte, zentrierte Spalte auf großen Bildschirmen |
+| **v1.27** | Pomodoro: mehrere Tabs – ein steuernder Tab, gesperrte Änderungen, Abgleich per BroadcastChannel |

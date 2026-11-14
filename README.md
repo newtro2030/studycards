@@ -2,7 +2,7 @@
 
 Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Spaced Repetition.
 
-![Version](https://img.shields.io/badge/version-1.18-7c3aed)
+![Version](https://img.shields.io/badge/version-1.27-7c3aed)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Desktop-brightgreen)
 
@@ -17,6 +17,7 @@ Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Sp
 - **Multiple Choice** — Obsidian-Checkboxen `- [x]` / `- [ ]` unter einer Frage werden zur MC-Aufgabe
 - **Automatische Updates** — Still im Hintergrund, nie mitten in einer Lernsitzung; manuell über „Nach Updates suchen“
 - **LaTeX-Support** — Mathematische Formeln via KaTeX
+- **Pomodoro-Timer** — Lern- und Pausenphasen mit Zyklus, Signalton, optionalen Mitteilungen, Statistik und Sicherung; funktioniert auch ohne geladene Karten
 - **Gamification** — XP, Levels, Streaks für Lernmotivation
 - **Dark Mode** — Mobile-first Design, optimiert für iPhone (Hoch- und Querformat)
 
@@ -104,7 +105,18 @@ Obsidian → Obsidian Git Plugin → GitHub Repo → StudyCards PWA
 
 Siehe [ARCHITEKTUR.md](ARCHITEKTUR.md) für eine detaillierte technische Dokumentation.
 
-**In Entwicklung:** Pomodoro-Timer – siehe [Pflichtenheft](docs/PFLICHTENHEFT_POMODORO.md).
+## Pomodoro
+
+Über die Kachel **Pomodoro** auf der Startseite (oder ohne Repository-Verbindung im Setup) öffnet sich der Timer:
+
+- **Standard** 25 / 5 / 15 Minuten, lange Pause nach 4 Lerneinheiten – oder ein **eigenes Profil** (Einstellungen → Pomodoro · Zeitprofil)
+- Start, Pause, Fortsetzen, Zurücksetzen, Pause überspringen; optionales Lernthema
+- Beim Kartenlernen: kompakte Timer-Leiste; der Wechsel zum Timer hält die Kartenrunde offen
+- Signalton (Glocke/Gong, Lautstärke, „Ton testen“) und optionale Systemmitteilungen
+- Statistik: Einheiten und Lernminuten heute und in den letzten 7 Tagen, Verlauf
+- Daten bleiben lokal im Browser; Sicherung als JSON exportieren und wieder importieren
+
+Details und Abnahmekriterien: [Pflichtenheft](docs/PFLICHTENHEFT_POMODORO.md).
 
 ## Tests
 
