@@ -349,6 +349,34 @@
           <h3>Aktivität (letzte 7 Tage)</h3>
           <div class="heatmap" id="stats-heatmap"></div>
         </div>
+        <section class="card-panel pomo-stats" aria-labelledby="pomo-stats-title">
+          <h3 id="pomo-stats-title">Pomodoro</h3>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span class="stat-box-value" id="pomo-stats-today-count">0</span>
+              <span class="stat-box-label">Einheiten heute</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="pomo-stats-today-min">0</span>
+              <span class="stat-box-label">Minuten heute</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="pomo-stats-week-count">0</span>
+              <span class="stat-box-label">Einheiten 7 Tage</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-box-value" id="pomo-stats-week-min">0</span>
+              <span class="stat-box-label">Minuten 7 Tage</span>
+            </div>
+          </div>
+          <h4 class="pomo-stats-sub">Lernminuten je Tag</h4>
+          <ol class="pomo-bars" id="pomo-stats-bars" aria-label="Lernminuten der letzten sieben Tage"></ol>
+          <p class="pomo-stats-pending hidden" id="pomo-stats-pending"></p>
+          <h4 class="pomo-stats-sub">Verlauf</h4>
+          <ul class="pomo-history" id="pomo-stats-history"></ul>
+          <p class="pomo-stats-empty hidden" id="pomo-stats-empty">Noch keine Pomodoro-Einheiten. Starte eine Lernphase über „Pomodoro“ auf der Startseite.</p>
+          <p class="pomo-stats-note">Gezählt werden abgeschlossene Timer-Einheiten. Die Statistik misst keine Aufmerksamkeit oder Lernleistung.</p>
+        </section>
         <div class="card-panel">
           <h3>Bestleistungen</h3>
           <div class="stats-grid">

@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.23'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.24'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -1407,6 +1407,8 @@
             <span class="heatmap-label">${d.label}</span>
           </div>`;
       }).join('');
+
+      PomodoroUI.renderStats();
     },
 
     // ----- Bilder -----
@@ -1704,6 +1706,7 @@
       if (res.session) {
         this.sessions = window.Pomodoro.appendSession(this.sessions, res.session);
         this._save('sessions', this.sessions);
+        if (App.currentScreen === 'stats') this.renderStats();
       }
       this._save('state', this.state);
       if (res.event) this._onEvent(res.event, { silent });
@@ -1887,6 +1890,58 @@
           : '';
       $('pomo-notify-hint').classList.toggle('hidden', !hint);
       $('pomo-notify-hint').textContent = hint;
+    },
+
+    // ----- Statistik (F08) -----
+    HISTORY_LIMIT: 30,
+
+    renderStats() {
+      const $ = (id) => document.getElementById(id);
+      const now = Date.now();
+      const sum = window.Pomodoro.summarize(this.sessions, now);
+      $('pomo-stats-today-count').textContent = sum.today.count;
+      $('pomo-stats-today-min').textContent = sum.today.minutes;
+      $('pomo-stats-week-count').textContent = sum.last7.count;
+      $('pomo-stats-week-min').textContent = sum.last7.minutes;
+
+      // Tagesübersicht: Balkenhöhe relativ zum stärksten Tag, Wert immer auch als Text
+      const max = Math.max(1, ...sum.days.map(d => d.minutes));
+      const todayKey = window.Pomodoro.localDayKey(now);
+      $('pomo-stats-bars').innerHTML = sum.days.map(d => {
+        const [y, m, day] = d.day.split('-').map(Number);
+        const date = new Date(y, m - 1, day);
+        const weekday = date.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '');
+        const long = date.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+        const pct = Math.round((d.minutes / max) * 100);
+        return `<li class="pomo-bar${d.day === todayKey ? ' is-today' : ''}" aria-label="${escapeHTML(`${long}: ${d.count} ${d.count === 1 ? 'Einheit' : 'Einheiten'}, ${d.minutes} ${d.minutes === 1 ? 'Minute' : 'Minuten'}`)}">
+          <span class="pomo-bar-value" aria-hidden="true">${d.minutes}</span>
+          <span class="pomo-bar-track" aria-hidden="true"><span class="pomo-bar-fill" style="height:${pct}%"></span></span>
+          <span class="pomo-bar-label" aria-hidden="true">${escapeHTML(weekday)}</span>
+        </li>`;
+      }).join('');
+
+      // Ungeklärte Einheit zählt noch nicht (F04) – darauf hinweisen
+      $('pomo-stats-pending').classList.toggle('hidden', this.state.status !== 'review');
+      $('pomo-stats-pending').textContent = 'Eine Lerneinheit wartet auf „Abschluss prüfen“ und ist noch nicht mitgezählt.';
+
+      // Verlauf: neueste zuerst
+      const list = [...this.sessions].sort((a, b) => b.endedAt - a.endedAt).slice(0, this.HISTORY_LIMIT);
+      $('pomo-stats-empty').classList.toggle('hidden', list.length > 0);
+      $('pomo-stats-history').innerHTML = list.map(s => {
+        const when = new Date(s.endedAt).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const done = s.status === 'completed';
+        const minutes = s.learnedMs === null ? null : Math.round(s.learnedMs / 60000);
+        const duration = done ? `${minutes} min`
+          : minutes === null ? 'abgebrochen' : `abgebrochen nach ${minutes} min`;
+        return `<li class="pomo-history-item">
+          <div class="pomo-history-main">
+            <span class="pomo-history-topic">${escapeHTML(s.topic || 'Ohne Thema')}</span>
+            <span class="pomo-history-when">${escapeHTML(when)} · ${escapeHTML(duration)}</span>
+          </div>
+          <span class="pomo-history-status ${done ? 'is-done' : 'is-aborted'}">${done ? 'Abgeschlossen' : 'Abgebrochen'}</span>
+        </li>`;
+      }).join('') + (this.sessions.length > list.length
+        ? `<li class="pomo-history-more">${this.sessions.length - list.length} ältere Einträge nicht angezeigt</li>` : '');
     },
 
     // ----- Darstellung -----
