@@ -1815,3 +1815,51 @@ select:focus {
     padding-bottom: 3px;
   }
 }
+
+/* Pomodoro-Einstellungen */
+.pomo-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  justify-content: flex-end;
+  max-width: 220px;
+}
+
+.pomo-volume input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.pomo-volume output {
+  min-width: 44px;
+  text-align: right;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+#settings-pomodoro .btn + .setting-info,
+.pomo-notify-hint {
+  margin-top: 10px;
+  margin-bottom: 0;
+  color: var(--text-secondary);
+}
+
+.pomo-notify-row {
+  margin-top: 12px;
+}
+
+#settings-pomodoro select:disabled,
+#settings-pomodoro input:disabled {
+  opacity: 0.5;
+}
+
+#settings-pomodoro button:focus-visible,
+#settings-pomodoro select:focus-visible,
+#settings-pomodoro input:focus-visible,
+#btn-pomodoro-settings:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}

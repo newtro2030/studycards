@@ -298,3 +298,29 @@ test('gespeicherte Daten werden versioniert gelesen; Beschädigung wird erkannt'
 test('eigene Speicherschlüssel getrennt von den Kartendaten', () => {
   assert.deepEqual(P.STORAGE_KEYS, { settings: 'sc_pomodoro_settings', state: 'sc_pomodoro_state', sessions: 'sc_pomodoro_sessions' });
 });
+
+// ----- F05/F06 Ton- und Mitteilungseinstellungen -----
+
+test('Standardton ist eingeschaltet, 50 %, Mitteilungen aus; mindestens zwei Töne', () => {
+  const s = P.defaultSettings();
+  assert.deepEqual(s.sound, { enabled: true, tone: 'chime', volume: 50 });
+  assert.equal(s.notifications, false);
+  assert.ok(P.TONES.length >= 2);
+});
+
+test('Toneinstellungen werden geprüft; ältere Einstellungen ohne Mitteilungsfeld bleiben gültig', () => {
+  const s = P.defaultSettings();
+  const { notifications, ...old } = s;
+  assert.equal(P.parse('settings', P.serialize(old)).ok, true);
+  for (const bad of [
+    { ...s, sound: { ...s.sound, volume: 101 } },
+    { ...s, sound: { ...s.sound, volume: -1 } },
+    { ...s, sound: { ...s.sound, tone: 'sirene' } },
+    { ...s, notifications: 'ja' },
+  ]) {
+    assert.deepEqual(P.parse('settings', P.serialize(bad)), { ok: false, corrupt: true });
+  }
+  for (const tone of P.TONES) {
+    assert.equal(P.parse('settings', P.serialize({ ...s, sound: { enabled: false, tone, volume: 0 } })).ok, true);
+  }
+});

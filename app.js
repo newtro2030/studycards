@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.22'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.23'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -684,7 +684,7 @@
       document.querySelectorAll('.nav-item').forEach(btn => {
         btn.addEventListener('click', () => {
           const screen = btn.dataset.screen;
-          this.showScreen(screen);
+          this.showScreen(screen === 'dashboard' && !this.config ? 'setup' : screen);
         });
       });
 
@@ -1502,6 +1502,7 @@
     // ----- Settings Screen -----
     _renderSettings() {
       document.getElementById('app-version').textContent = APP_VERSION;
+      PomodoroUI.renderSettings();
       if (!this.config) return;
       document.getElementById('settings-owner').textContent = this.config.owner;
       document.getElementById('settings-repo').textContent = this.config.repo;
@@ -1522,6 +1523,88 @@
       setTimeout(() => {
         toast.classList.remove('show');
       }, 2500);
+    },
+  };
+
+  // ===== POMODORO: SIGNALTON (F05) =====
+  // Töne werden per Web Audio erzeugt (E3) – keine Audiodateien. Browser (v. a. Safari/iOS)
+  // geben Audio erst nach einer Nutzeraktion frei → unlock() bei Start und "Ton testen".
+  const PomodoroSound = {
+    ctx: null,
+
+    _context() {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      if (!this.ctx) this.ctx = new Ctx();
+      return this.ctx;
+    },
+
+    // Innerhalb eines Klicks aufrufen
+    unlock() {
+      const ctx = this._context();
+      if (!ctx) return;
+      if (ctx.state !== 'running') ctx.resume().catch(() => {});
+      // iOS: ein stiller Puffer im Klick schaltet die Ausgabe dauerhaft frei
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+    },
+
+    // → true, wenn abgespielt; false, wenn nicht möglich (blockiert/nicht unterstützt)
+    async play(tone, volume) {
+      const ctx = this._context();
+      if (!ctx) return false;
+      if (ctx.state !== 'running') {
+        try { await ctx.resume(); } catch {}
+        if (ctx.state !== 'running') return false;
+      }
+      const gain = ctx.createGain();
+      gain.gain.value = Math.max(0, Math.min(100, volume)) / 100 * 0.5;
+      gain.connect(ctx.destination);
+      const t0 = ctx.currentTime + 0.02;
+      // Glocke: drei kurze, aufsteigende Töne · Gong: tiefer Ton mit Obertönen, länger ausklingend
+      const notes = tone === 'gong'
+        ? [[0, 196, 3.5, 1], [0, 392, 2.5, 0.4], [0, 588, 1.6, 0.2]]
+        : [[0, 880, 1.2, 1], [0.35, 1109, 1.2, 1], [0.7, 1319, 1.6, 1]];
+      for (const [delay, freq, dur, level] of notes) {
+        const osc = ctx.createOscillator();
+        const env = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        env.gain.setValueAtTime(0.0001, t0 + delay);
+        env.gain.exponentialRampToValueAtTime(level, t0 + delay + 0.02);
+        env.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + dur); // endet sicher < 5 s
+        osc.connect(env).connect(gain);
+        osc.start(t0 + delay);
+        osc.stop(t0 + delay + dur + 0.05);
+      }
+      return true;
+    },
+  };
+
+  // ===== POMODORO: SYSTEMMITTEILUNGEN (F06) =====
+  const PomodoroNotify = {
+    // 'unsupported' | 'default' | 'granted' | 'denied'
+    permission() {
+      return 'Notification' in window ? Notification.permission : 'unsupported';
+    },
+
+    // Nur nach ausdrücklichem Klick aufrufen; bei 'denied' fragt der Browser nicht erneut
+    async request() {
+      if (this.permission() !== 'default') return this.permission();
+      try { return await Notification.requestPermission(); } catch { return this.permission(); }
+    },
+
+    // Über den Service Worker, weil iOS (Home-Screen-App) nur diesen Weg unterstützt
+    async show(title, body) {
+      if (this.permission() !== 'granted') return;
+      const options = { body, tag: 'studycards-pomodoro', icon: 'icons/icon-192.png' };
+      try {
+        const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+        if (reg) return void await reg.showNotification(title, options);
+        new Notification(title, options);
+      } catch {}
     },
   };
 
@@ -1554,8 +1637,8 @@
       this.sessions = read('sessions') || [];
       this.state = read('state') || P.createInitialState();
 
-      // F04: abgelaufene Phasen beim Öffnen sofort verarbeiten
-      this._apply(P.restore(this.state, { now: Date.now(), profile: this.profile() }));
+      // F04: abgelaufene Phasen beim Öffnen sofort verarbeiten (ohne Ton: das Ende liegt zurück)
+      this._apply(P.restore(this.state, { now: Date.now(), profile: this.profile() }), { silent: true });
 
       document.querySelectorAll('[data-open-pomodoro]').forEach(btn =>
         btn.addEventListener('click', () => this.open()));
@@ -1571,6 +1654,11 @@
       document.getElementById('pomo-mini-dismiss').addEventListener('click', () => {
         this.notice = '';
         this.renderMini();
+      });
+      this._bindSettings();
+      document.getElementById('btn-pomodoro-settings').addEventListener('click', () => {
+        App.showScreen('settings');
+        document.getElementById('settings-pomodoro').scrollIntoView({ block: 'start' });
       });
       document.getElementById('pomo-review-aborted').addEventListener('click', () =>
         this._act(st => P.resolveReview(st, { outcome: 'aborted', profile: this.profile() })));
@@ -1610,7 +1698,7 @@
     // ----- Zustandsänderungen -----
 
     // Übernimmt ein Ergebnis aus pomodoro.js: Zustand, Protokolleintrag, Ereignis
-    _apply(res) {
+    _apply(res, { silent = false } = {}) {
       if (!res) return;
       this.state = res.state;
       if (res.session) {
@@ -1618,7 +1706,7 @@
         this._save('sessions', this.sessions);
       }
       this._save('state', this.state);
-      if (res.event) this._onEvent(res.event);
+      if (res.event) this._onEvent(res.event, { silent });
       App._maybeApplyUpdate(); // Phase beendet/zurückgesetzt → zurückgehaltenes Update ggf. jetzt
     },
 
@@ -1637,6 +1725,7 @@
     },
 
     _onMain() {
+      PomodoroSound.unlock();
       const P = window.Pomodoro;
       const now = Date.now();
       switch (this.state.status) {
@@ -1658,7 +1747,7 @@
       this._act(st => window.Pomodoro.reset(st, { now: Date.now() }));
     },
 
-    _onEvent(event) {
+    _onEvent(event, { silent = false } = {}) {
       let text;
       if (event.type === 'needs-review') {
         text = 'Lernphase abgelaufen – bitte Abschluss prüfen.';
@@ -1671,6 +1760,24 @@
       document.getElementById('pomo-announce').textContent = text; // für Screenreader
       if (App.currentScreen !== 'pomodoro' && App.currentScreen !== 'study') App.showToast(text);
       this.renderMini();
+      if (!silent) this._signal(text);
+    },
+
+    // F05/F06: genau einmal pro Endereignis (Ereignisse entstehen nur beim Zustandswechsel)
+    async _signal(text) {
+      const { sound, notifications } = this.settings;
+      if (sound.enabled && sound.volume > 0) {
+        const played = await PomodoroSound.play(sound.tone, sound.volume);
+        if (!played) {
+          this.notice = `${text} (Ton blockiert – siehe Einstellungen → „Ton testen“.)`;
+          this.render();
+          this.renderMini();
+        }
+      }
+      // Außerhalb der App nur, wenn sie gerade nicht im Blick ist
+      if (notifications && (document.visibilityState !== 'visible' || !document.hasFocus())) {
+        PomodoroNotify.show('StudyCards · Pomodoro', text);
+      }
     },
 
     _setNotice(text) {
@@ -1715,6 +1822,71 @@
       } catch {
         this.saveFailed = true;
       }
+    },
+
+    // ----- Einstellungen: Ton und Mitteilungen -----
+    _bindSettings() {
+      const $ = (id) => document.getElementById(id);
+      const update = (fn) => {
+        fn(this.settings);
+        this._save('settings', this.settings);
+        this.renderSettings();
+      };
+      $('pomo-sound-enabled').addEventListener('change', (e) => update(st => { st.sound.enabled = e.target.checked; }));
+      $('pomo-sound-tone').addEventListener('change', (e) => update(st => { st.sound.tone = e.target.value; }));
+      $('pomo-sound-volume').addEventListener('input', (e) => update(st => { st.sound.volume = parseInt(e.target.value, 10); }));
+      $('pomo-sound-test').addEventListener('click', async () => {
+        PomodoroSound.unlock();
+        const { tone, volume } = this.settings.sound;
+        const ok = await PomodoroSound.play(tone, volume);
+        this._soundHint = ok
+          ? (volume === 0 ? 'Lautstärke steht auf 0 % – es ist nichts zu hören.' : 'Nichts gehört? Prüfe Stummschaltung und Lautstärke von Gerät und Tab.')
+          : 'Der Browser blockiert die Tonausgabe. In Safari: Einstellungen für diese Website → Automatische Wiedergabe → „Alle Medien erlauben“. Der Timer funktioniert trotzdem.';
+        this.renderSettings();
+      });
+      $('pomo-notify-btn').addEventListener('click', async () => {
+        if (this.settings.notifications && PomodoroNotify.permission() === 'granted') {
+          update(st => { st.notifications = false; });
+          return;
+        }
+        const result = await PomodoroNotify.request();
+        update(st => { st.notifications = result === 'granted'; });
+      });
+    },
+
+    renderSettings() {
+      const $ = (id) => document.getElementById(id);
+      const { sound } = this.settings;
+      $('pomo-sound-enabled').checked = sound.enabled;
+      $('pomo-sound-tone').value = sound.tone;
+      $('pomo-sound-tone').disabled = !sound.enabled;
+      $('pomo-sound-volume').value = sound.volume;
+      $('pomo-sound-volume').disabled = !sound.enabled;
+      $('pomo-sound-volume').setAttribute('aria-valuetext', `${sound.volume} Prozent`);
+      $('pomo-sound-volume-value').textContent = `${sound.volume} %`;
+      $('pomo-sound-hint').classList.toggle('hidden', !this._soundHint);
+      $('pomo-sound-hint').textContent = this._soundHint || '';
+
+      // Status als Text, Button nur wenn sinnvoll – keine wiederholten Berechtigungsdialoge
+      const perm = PomodoroNotify.permission();
+      const active = perm === 'granted' && this.settings.notifications;
+      const status = {
+        unsupported: 'nicht unterstützt',
+        denied: 'blockiert',
+        default: 'aus',
+        granted: active ? 'aktiv' : 'erlaubt, aus',
+      }[perm];
+      $('pomo-notify-status').textContent = status;
+      const btn = $('pomo-notify-btn');
+      btn.classList.toggle('hidden', perm === 'unsupported' || perm === 'denied');
+      btn.textContent = active ? 'Mitteilungen ausschalten' : 'Mitteilungen aktivieren';
+      const hint = perm === 'denied'
+        ? 'Mitteilungen wurden abgelehnt. Erlauben kannst du sie in den Website-Einstellungen des Browsers bzw. in den Systemeinstellungen.'
+        : perm === 'unsupported'
+          ? 'Dieser Browser unterstützt keine Mitteilungen. Auf dem iPhone funktionieren sie nur, wenn StudyCards über „Zum Home-Bildschirm“ geöffnet wird.'
+          : '';
+      $('pomo-notify-hint').classList.toggle('hidden', !hint);
+      $('pomo-notify-hint').textContent = hint;
     },
 
     // ----- Darstellung -----

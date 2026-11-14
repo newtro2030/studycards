@@ -271,7 +271,9 @@
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         </button>
         <h2 class="pomo-title">Pomodoro</h2>
-        <div style="width:40px"></div>
+        <button class="icon-btn" id="btn-pomodoro-settings" aria-label="Pomodoro-Einstellungen">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
       </header>
 
       <div class="pomo-content">
@@ -437,6 +439,39 @@
             </label>
           </div>
         </div>
+        <section class="card-panel" id="settings-pomodoro" aria-labelledby="settings-pomodoro-title">
+          <h3 id="settings-pomodoro-title">Pomodoro · Signal</h3>
+          <div class="setting-row">
+            <label class="setting-label" for="pomo-sound-enabled">Signalton</label>
+            <label class="toggle">
+              <input type="checkbox" id="pomo-sound-enabled" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <label class="setting-label" for="pomo-sound-tone">Ton</label>
+            <select id="pomo-sound-tone">
+              <option value="chime">Glocke</option>
+              <option value="gong">Gong</option>
+            </select>
+          </div>
+          <div class="setting-row pomo-volume-row">
+            <label class="setting-label" for="pomo-sound-volume">Lautstärke</label>
+            <div class="pomo-volume">
+              <input type="range" id="pomo-sound-volume" min="0" max="100" step="5" value="50" aria-valuetext="50 Prozent">
+              <output id="pomo-sound-volume-value" for="pomo-sound-volume">50 %</output>
+            </div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="pomo-sound-test">Ton testen</button>
+          <p class="setting-info pomo-sound-hint hidden" id="pomo-sound-hint" role="status"></p>
+
+          <div class="setting-row pomo-notify-row">
+            <span class="setting-label">Mitteilungen</span>
+            <span class="setting-value" id="pomo-notify-status">–</span>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm hidden" id="pomo-notify-btn">Mitteilungen aktivieren</button>
+          <p class="setting-info pomo-notify-hint hidden" id="pomo-notify-hint"></p>
+        </section>
         <div class="card-panel">
           <h3>Daten</h3>
           <p class="setting-info">Lernfortschritt wird lokal im Browser gespeichert.</p>

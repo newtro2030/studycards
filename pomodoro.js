@@ -25,6 +25,7 @@
   const TOPIC_MAX_LENGTH = 100;        // F07
 
   const PHASES = ['work', 'shortBreak', 'longBreak'];
+  const TONES = ['chime', 'gong']; // F05: mindestens zwei dezente Töne (per Web Audio erzeugt, E3)
   const STATUSES = ['idle', 'running', 'paused', 'review'];
 
   const LIMITS = {
@@ -44,6 +45,7 @@
       activeProfile: 'standard',     // 'standard' | 'custom'
       custom: { ...DEFAULT_PROFILE }, // bleibt beim Wechsel auf "Standard" erhalten
       sound: { enabled: true, tone: 'chime', volume: 50 },
+      notifications: false, // F06: erst nach ausdrücklichem Aktivieren
     };
   }
 
@@ -320,8 +322,9 @@
   function isValidSettings(s) {
     return !!s && (s.activeProfile === 'standard' || s.activeProfile === 'custom') &&
       validateProfile(s.custom).ok &&
-      !!s.sound && typeof s.sound.enabled === 'boolean' && typeof s.sound.tone === 'string' &&
-      isInt(s.sound.volume) && s.sound.volume >= 0 && s.sound.volume <= 100;
+      !!s.sound && typeof s.sound.enabled === 'boolean' && TONES.includes(s.sound.tone) &&
+      isInt(s.sound.volume) && s.sound.volume >= 0 && s.sound.volume <= 100 &&
+      (s.notifications === undefined || typeof s.notifications === 'boolean'); // ältere Stände ohne Feld bleiben gültig
   }
 
   function isValidState(s) {
@@ -358,7 +361,7 @@
   }
 
   return {
-    SCHEMA_VERSION, STORAGE_KEYS, LIMITS, DEFAULT_PROFILE, LATE_TOLERANCE_MS, TOPIC_MAX_LENGTH,
+    SCHEMA_VERSION, STORAGE_KEYS, LIMITS, TONES, DEFAULT_PROFILE, LATE_TOLERANCE_MS, TOPIC_MAX_LENGTH,
     defaultSettings, validateProfile, activeProfile,
     createInitialState, isActive, remainingMs,
     start, pause, resume, reset, tick, resolveReview, skipBreak, restartCycle, restore,
