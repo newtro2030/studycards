@@ -2143,3 +2143,54 @@ select:focus {
   outline: 2px solid var(--accent-light);
   outline-offset: 2px;
 }
+
+/* ===== LESBARE BREITE AUF GROSSEN BILDSCHIRMEN =====
+   Inhalte bleiben eine kompakte, zentrierte Spalte statt über die volle Fensterbreite
+   zu laufen. Auf dem Handy (schmaler als die Spalte) ändert sich nichts. */
+:root {
+  --content-max: 600px;
+}
+
+#dashboard-screen > :not(.bottom-nav),
+#pomodoro-screen > .study-header {
+  max-width: var(--content-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Buttons sind inline-flex – als Block, damit die automatische Zentrierung greift */
+#dashboard-screen > .btn {
+  display: flex;
+}
+
+/* Lernmodus ist eine Flex-Spalte: zentrieren über align-self, volle Breite bis zur Grenze */
+#study-screen > * {
+  align-self: center;
+  width: 100%;
+  max-width: var(--content-max);
+}
+
+/* Screens mit eigenem Innenabstand (16px links/rechts) */
+#stats-screen > :not(.bottom-nav),
+#settings-screen > :not(.bottom-nav) {
+  max-width: calc(var(--content-max) + 32px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Kompakte Leiste im Lernmodus: seitlicher Abstand von 16px bleibt erhalten */
+#study-screen > .pomo-mini {
+  width: calc(100% - 32px);
+  max-width: calc(var(--content-max) - 32px);
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Navigation: Einträge nah beieinander statt über die ganze Breite verteilt */
+.bottom-nav {
+  justify-content: center;
+}
+
+.nav-item {
+  max-width: 180px;
+}
