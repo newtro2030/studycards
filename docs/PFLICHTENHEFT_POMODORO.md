@@ -171,3 +171,16 @@ docs/
 ```
 
 Die bestehende README erhält einen Link auf das Pflichtenheft. Später werden Anwendungscode, gezielte Tests und die vorhandene Architektur-Dokumentation ergänzt. Repository und Bereitstellung bleiben bei [StudyCards auf GitHub Pages](https://newtro2030.github.io/studycards/). Die zusätzliche Funktion verwendet dieselbe App-Adresse und denselben PWA-Service-Worker. Das überarbeitete Konzept liegt derzeit lokal vor; weder Repository noch veröffentlichte App wurden geändert.
+
+## 9 Entscheidungen vom 14. November 2026
+
+Ergänzungen und Präzisierungen nach Prüfung des Konzepts gegen den aktuellen Code. Sie gehen den Abschnitten 1–8 vor.
+
+| Nr. | Thema | Entscheidung |
+| --- | --- | --- |
+| E1 | Zielgeräte | Abgenommen wird in Safari und Chrome auf dem MacBook **und** auf dem iPhone (StudyCards als Home-Screen-App). Abschnitt 5 und 7 gelten entsprechend für das iPhone; dort gelten die Einschränkungen von iOS für Ton und Mitteilungen (Ton erst nach Berührung, Mitteilungen nur für Home-Screen-Apps). |
+| E2 | Erreichbarkeit | Der Timer ist auch ohne geladene Karten erreichbar, z. B. offline oder bei fehlender bzw. fehlerhafter Repository-Verbindung. |
+| E3 | Töne | Die Signaltöne werden per Web Audio im Code erzeugt; es werden keine Audiodateien ausgeliefert. |
+| E4 | Mehrere Tabs | Die Steuerung „nur ein Timer“ (F11) nutzt die Web Locks API; der Abgleich zwischen Tabs erfolgt über `BroadcastChannel`. |
+| E5 | Werte | Die Grundeinstellungen und Grenzwerte aus Abschnitt 2 (25/5/15, vier Einheiten) sind freigegeben. |
+| E6 | Zurück-Pfeil | Der Zurück-Pfeil im Kartenlernen beendet die Kartenrunde („bewusstes Verlassen“). Nur der Wechsel zum Timer hält die Runde offen. |
