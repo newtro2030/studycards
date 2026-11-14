@@ -360,12 +360,69 @@
     }
   }
 
+  // ===== SICHERUNG (F10) =====
+  // Enthält nur Pomodoro-Einstellungen und abgeschlossene/abgebrochene Einheiten –
+  // keine aktive oder ungeklärte Phase, keine Kartendaten, kein GitHub-Token.
+
+  const BACKUP_FORMAT = 'studycards-pomodoro-backup';
+
+  function createBackup(settings, sessions, now) {
+    return {
+      format: BACKUP_FORMAT,
+      version: SCHEMA_VERSION,
+      exportedAt: new Date(now).toISOString(),
+      settings: {
+        version: SCHEMA_VERSION,
+        activeProfile: settings.activeProfile,
+        custom: { ...settings.custom },
+        sound: { ...settings.sound },
+        notifications: !!settings.notifications,
+      },
+      sessions: sessions.filter(isValidSession).map(s => ({ ...s })),
+    };
+  }
+
+  // Prüft Dateiinhalt und Werte vollständig, bevor irgendetwas geändert wird.
+  // → { ok: true, value: { settings, sessions } } oder { ok: false, error: 'Hinweis' }
+  function parseBackup(text) {
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { ok: false, error: 'Die Datei ist kein gültiges JSON.' };
+    }
+    if (!data || data.format !== BACKUP_FORMAT) {
+      return { ok: false, error: 'Die Datei ist keine StudyCards-Pomodoro-Sicherung.' };
+    }
+    if (data.version !== SCHEMA_VERSION) {
+      return { ok: false, error: `Sicherungsversion ${data.version} wird nicht unterstützt.` };
+    }
+    if (!isValidSettings(data.settings)) {
+      return { ok: false, error: 'Die Einstellungen in der Sicherung sind ungültig.' };
+    }
+    if (!Array.isArray(data.sessions) || !data.sessions.every(isValidSession)) {
+      return { ok: false, error: 'Der Verlauf in der Sicherung ist ungültig.' };
+    }
+    if (new Set(data.sessions.map(s => s.id)).size !== data.sessions.length) {
+      return { ok: false, error: 'Der Verlauf enthält doppelte Einträge.' };
+    }
+    const { activeProfile, custom, sound } = data.settings;
+    return {
+      ok: true,
+      value: {
+        settings: { version: SCHEMA_VERSION, activeProfile, custom: { ...custom }, sound: { ...sound }, notifications: !!data.settings.notifications },
+        sessions: data.sessions.map(s => ({ id: s.id, startedAt: s.startedAt, endedAt: s.endedAt, plannedMs: s.plannedMs, learnedMs: s.learnedMs, status: s.status, topic: s.topic })),
+      },
+    };
+  }
+
   return {
-    SCHEMA_VERSION, STORAGE_KEYS, LIMITS, TONES, DEFAULT_PROFILE, LATE_TOLERANCE_MS, TOPIC_MAX_LENGTH,
+    SCHEMA_VERSION, BACKUP_FORMAT, STORAGE_KEYS, LIMITS, TONES, DEFAULT_PROFILE, LATE_TOLERANCE_MS, TOPIC_MAX_LENGTH,
     defaultSettings, validateProfile, activeProfile,
     createInitialState, isActive, remainingMs,
     start, pause, resume, reset, tick, resolveReview, skipBreak, restartCycle, restore,
     appendSession, localDayKey, summarize,
     serialize, parse,
+    createBackup, parseBackup,
   };
 });

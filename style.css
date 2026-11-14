@@ -1999,3 +1999,147 @@ select:focus {
   line-height: 1.5;
   color: var(--text-secondary);
 }
+
+/* Pomodoro-Zeitprofil */
+.pomo-segment {
+  display: flex;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.pomo-segment label {
+  flex: 1;
+  position: relative;
+  cursor: pointer;
+}
+
+.pomo-segment input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+
+.pomo-segment span {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.pomo-segment input:checked + span {
+  background: var(--accent);
+  color: #fff;
+}
+
+.pomo-segment input:focus-visible + span {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+.pomo-profile-summary {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+}
+
+.pomo-profile-form {
+  margin-top: 14px;
+}
+
+.pomo-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.pomo-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.pomo-field-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pomo-field-input input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* kein Auto-Zoom auf dem iPhone */
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.pomo-field-input input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.pomo-field-unit {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.pomo-field-error {
+  display: block;
+  min-height: 1em;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #f87171; /* kontraststärkeres Rot auf dunklem Grund */
+}
+
+.pomo-profile-status,
+.pomo-data-status {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+}
+
+/* Pomodoro-Daten */
+.pomo-data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pomo-data-actions .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pomo-corrupt {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.1);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.pomo-corrupt p {
+  margin-bottom: 10px;
+}
+
+#settings-pomodoro-profile button:focus-visible,
+#settings-pomodoro-profile input:focus-visible,
+#settings-pomodoro-data button:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}

@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.24'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.25'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -1504,6 +1504,7 @@
     // ----- Settings Screen -----
     _renderSettings() {
       document.getElementById('app-version').textContent = APP_VERSION;
+      PomodoroUI.resetSettingsMessages(); // beim Öffnen der Einstellungen alte Hinweise ausblenden
       PomodoroUI.renderSettings();
       if (!this.config) return;
       document.getElementById('settings-owner').textContent = this.config.owner;
@@ -1658,9 +1659,11 @@
         this.renderMini();
       });
       this._bindSettings();
+      this._bindProfile();
+      this._bindData();
       document.getElementById('btn-pomodoro-settings').addEventListener('click', () => {
         App.showScreen('settings');
-        document.getElementById('settings-pomodoro').scrollIntoView({ block: 'start' });
+        document.getElementById('settings-pomodoro-profile').scrollIntoView({ block: 'start' });
       });
       document.getElementById('pomo-review-aborted').addEventListener('click', () =>
         this._act(st => P.resolveReview(st, { outcome: 'aborted', profile: this.profile() })));
@@ -1710,6 +1713,7 @@
       }
       this._save('state', this.state);
       if (res.event) this._onEvent(res.event, { silent });
+      if (App.currentScreen === 'settings') this.renderSettings(); // Sperre für Import/Löschen aktualisieren
       App._maybeApplyUpdate(); // Phase beendet/zurückgesetzt → zurückgehaltenes Update ggf. jetzt
     },
 
@@ -1857,8 +1861,187 @@
       });
     },
 
+    // ----- Zeitprofil (F01) -----
+    PROFILE_FIELDS: ['work', 'shortBreak', 'longBreak', 'longBreakAfter'],
+
+    _bindProfile() {
+      const $ = (id) => document.getElementById(id);
+      document.querySelectorAll('input[name="pomo-profile"]').forEach(radio =>
+        radio.addEventListener('change', () => {
+          this._profileErrors = null;
+          this._profileStatus = '';
+          // Wechsel aktiviert das gewählte Profil sofort; eigene Werte bleiben in beiden Fällen erhalten
+          this.settings.activeProfile = radio.value;
+          this._save('settings', this.settings);
+          this._profileStatus = this._appliesHint(radio.value === 'standard' ? 'Standard aktiv.' : 'Individuell aktiv.');
+          this._profileEditing = radio.value === 'custom';
+          this.renderSettings();
+        }));
+      $('pomo-profile-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = Object.fromEntries(this.PROFILE_FIELDS.map(f => [f, $(`pomo-profile-${f}`).value]));
+        const check = window.Pomodoro.validateProfile(input);
+        if (!check.ok) {
+          this._profileErrors = check.errors; // nichts speichern
+          this._profileStatus = '';
+          this.renderSettings();
+          $(`pomo-profile-${Object.keys(check.errors)[0]}`).focus();
+          return;
+        }
+        this._profileErrors = null;
+        this.settings.activeProfile = 'custom';
+        this.settings.custom = check.value;
+        this._save('settings', this.settings);
+        this._profileStatus = this._appliesHint('Gespeichert.');
+        this.renderSettings();
+        this.renderTile();
+      });
+    },
+
+    resetSettingsMessages() {
+      this._dataStatus = '';
+      this._profileStatus = '';
+      this._profileErrors = null;
+      this._profileEditing = undefined;
+    },
+
+    _appliesHint(prefix) {
+      return this.isActive() ? `${prefix} Gilt ab der nächsten Phase – die laufende Phase behält ihre Dauer.` : prefix;
+    },
+
+    _renderProfile() {
+      const $ = (id) => document.getElementById(id);
+      const s = this.settings;
+      const editing = this._profileEditing ?? s.activeProfile === 'custom';
+      document.querySelectorAll('input[name="pomo-profile"]').forEach(r => {
+        r.checked = r.value === (editing ? 'custom' : 'standard');
+      });
+      const p = window.Pomodoro.activeProfile(s);
+      $('pomo-profile-summary').textContent =
+        `Aktiv: ${s.activeProfile === 'custom' ? 'Individuell' : 'Standard'} · ${p.work} / ${p.shortBreak} / ${p.longBreak} min, lange Pause nach ${p.longBreakAfter} Einheiten`;
+      $('pomo-profile-form').classList.toggle('hidden', !editing);
+      const errors = this._profileErrors || {};
+      for (const f of this.PROFILE_FIELDS) {
+        const input = $(`pomo-profile-${f}`);
+        if (!errors[f] && document.activeElement !== input && !this._profileErrors) input.value = s.custom[f];
+        input.setAttribute('aria-invalid', errors[f] ? 'true' : 'false');
+        $(`pomo-profile-${f}-error`).textContent = errors[f] || '';
+      }
+      $('pomo-profile-status').classList.toggle('hidden', !this._profileStatus);
+      $('pomo-profile-status').textContent = this._profileStatus || '';
+    },
+
+    // ----- Sicherung, Import, Löschen (F09, F10) -----
+    _bindData() {
+      const $ = (id) => document.getElementById(id);
+      const P = window.Pomodoro;
+      const setStatus = (text) => { this._dataStatus = text; this.renderSettings(); };
+
+      $('pomo-export').addEventListener('click', () => {
+        const backup = P.createBackup(this.settings, this.sessions, Date.now());
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement('a'), {
+          href: url, download: `studycards-pomodoro-${P.localDayKey(Date.now())}.json`,
+        });
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        setStatus(`Sicherung mit ${this._entries(backup.sessions.length, true)} erstellt.`);
+      });
+
+      $('pomo-import').addEventListener('click', () => {
+        if (this.isActive()) return setStatus(this._lockedHint());
+        $('pomo-import-file').value = '';
+        $('pomo-import-file').click();
+      });
+      $('pomo-import-file').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (this.isActive()) return setStatus(this._lockedHint());
+        let text = '';
+        try { text = await file.text(); } catch { return setStatus('Die Datei konnte nicht gelesen werden.'); }
+        const res = P.parseBackup(text);
+        if (!res.ok) return setStatus(`Import abgebrochen: ${res.error} Deine Daten sind unverändert.`);
+        const n = res.value.sessions.length;
+        if (!window.confirm(`Sicherung importieren?\n\nPomodoro-Einstellungen und Verlauf werden durch die Sicherung ersetzt (${this._entries(n)}). Der Zyklus beginnt neu. Kartendaten bleiben unverändert.`)) return;
+        this.settings = res.value.settings;
+        this.sessions = res.value.sessions;
+        this.state = P.createInitialState();
+        this.corrupt = []; // ersetzt auch beschädigte Bereiche
+        this._save('settings', this.settings);
+        this._save('sessions', this.sessions);
+        this._save('state', this.state);
+        this._profileEditing = undefined;
+        this.notice = '';
+        this._afterDataChange(`Sicherung importiert (${this._entries(n)}).`);
+      });
+
+      $('pomo-clear').addEventListener('click', () => {
+        if (this.isActive()) return setStatus(this._lockedHint());
+        if (!window.confirm('Pomodoro-Verlauf löschen?\n\nAlle protokollierten Einheiten werden entfernt und der Zyklus beginnt neu. Einstellungen und Kartendaten bleiben erhalten. Das lässt sich nur mit einer vorher exportierten Sicherung rückgängig machen.')) return;
+        this.sessions = [];
+        this.state = P.createInitialState();
+        this.corrupt = this.corrupt.filter(k => k !== 'sessions' && k !== 'state');
+        this._save('sessions', this.sessions);
+        this._save('state', this.state);
+        this.notice = '';
+        this._afterDataChange('Verlauf gelöscht.');
+      });
+
+      $('pomo-corrupt-reset').addEventListener('click', () => {
+        if (!window.confirm(`Beschädigte Pomodoro-Daten zurücksetzen?\n\nBetroffen: ${this._corruptLabel()}. Andere Pomodoro-Daten und alle Kartendaten bleiben erhalten.`)) return;
+        const kinds = this.corrupt;
+        this.corrupt = [];
+        if (kinds.includes('settings')) { this.settings = P.defaultSettings(); this._save('settings', this.settings); }
+        if (kinds.includes('sessions')) { this.sessions = []; this._save('sessions', this.sessions); }
+        if (kinds.includes('state')) { this.state = P.createInitialState(); this._save('state', this.state); }
+        this._afterDataChange('Beschädigte Daten zurückgesetzt.');
+      });
+    },
+
+    // "1 Eintrag" / "3 Einträge"; im Dativ ("mit 3 Einträgen")
+    _entries(n, dative = false) {
+      if (n === 1) return '1 Eintrag';
+      return `${n} ${dative ? 'Einträgen' : 'Einträge'}`;
+    },
+
+    _lockedHint() {
+      return 'Nicht möglich, solange eine Pomodoro-Phase läuft, pausiert ist oder auf „Abschluss prüfen“ wartet.';
+    },
+
+    _corruptLabel() {
+      const names = { settings: 'Einstellungen', state: 'aktueller Timer', sessions: 'Verlauf' };
+      return this.corrupt.map(k => names[k]).join(', ');
+    },
+
+    _afterDataChange(status) {
+      this._dataStatus = status;
+      this._syncTimer();
+      this.renderSettings();
+      this.renderTile();
+      App._maybeApplyUpdate();
+    },
+
     renderSettings() {
       const $ = (id) => document.getElementById(id);
+      this._renderProfile();
+
+      // Daten: Sperre bei aktiver Phase, Hinweis bei Beschädigung
+      const locked = this.isActive();
+      $('pomo-import').disabled = locked;
+      $('pomo-clear').disabled = locked;
+      $('pomo-import').title = locked ? this._lockedHint() : '';
+      $('pomo-clear').title = locked ? this._lockedHint() : '';
+      $('pomo-corrupt').classList.toggle('hidden', !this.corrupt.length);
+      $('pomo-corrupt-text').textContent = this.corrupt.length
+        ? `Beschädigte Pomodoro-Daten erkannt (${this._corruptLabel()}). Sie werden nicht überschrieben. Importiere eine Sicherung oder setze die betroffenen Daten zurück.`
+        : '';
+      const dataStatus = this._dataStatus || (locked ? this._lockedHint().replace('Nicht möglich', 'Import und Löschen sind nicht möglich') : '');
+      $('pomo-data-status').classList.toggle('hidden', !dataStatus);
+      $('pomo-data-status').textContent = dataStatus;
+
       const { sound } = this.settings;
       $('pomo-sound-enabled').checked = sound.enabled;
       $('pomo-sound-tone').value = sound.tone;
@@ -2044,7 +2227,7 @@
 
       // Speicherprobleme (F09)
       const warn = this.saveFailed ? 'Daten werden aktuell nicht gespeichert.'
-        : this.corrupt.length ? 'Gespeicherte Pomodoro-Daten sind beschädigt und werden nicht überschrieben. Wiederherstellen oder Zurücksetzen folgt in den Einstellungen.'
+        : this.corrupt.length ? 'Gespeicherte Pomodoro-Daten sind beschädigt und werden nicht überschrieben. Eine Sicherung importieren oder die Daten zurücksetzen kannst du unter Einstellungen → Pomodoro · Daten.'
         : '';
       $('pomo-storage-notice').classList.toggle('hidden', !warn);
       $('pomo-storage-notice').textContent = warn;

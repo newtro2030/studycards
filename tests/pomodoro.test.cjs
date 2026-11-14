@@ -324,3 +324,58 @@ test('Toneinstellungen werden geprüft; ältere Einstellungen ohne Mitteilungsfe
     assert.equal(P.parse('settings', P.serialize({ ...s, sound: { enabled: false, tone, volume: 0 } })).ok, true);
   }
 });
+
+// ----- F10 Sicherung -----
+
+function sampleSessions() {
+  const done = runWork(P.createInitialState(), T0).session;
+  const aborted = P.reset(P.start(P.createInitialState(), { now: T0, profile: STD, id: 'ab', topic: 'BI' }).state, { now: T0 + MIN }).session;
+  return [done, aborted];
+}
+
+test('Sicherung enthält nur Einstellungen und Verlauf – keine aktiven Phasen, Karten oder Token', () => {
+  const settings = { ...P.defaultSettings(), activeProfile: 'custom', custom: { work: 50, shortBreak: 10, longBreak: 20, longBreakAfter: 3 } };
+  const backup = P.createBackup(settings, sampleSessions(), T0);
+  assert.deepEqual(Object.keys(backup).sort(), ['exportedAt', 'format', 'sessions', 'settings', 'version']);
+  const text = JSON.stringify(backup);
+  for (const forbidden of ['token', 'sc_cards', 'sc_config', 'running', 'review', 'endsAt']) {
+    assert.equal(text.includes(forbidden), false, forbidden);
+  }
+});
+
+test('gültige Sicherung lässt sich wieder einlesen (Rundlauf)', () => {
+  const settings = { ...P.defaultSettings(), activeProfile: 'custom', custom: { work: 50, shortBreak: 10, longBreak: 20, longBreakAfter: 3 }, notifications: true };
+  const sessions = sampleSessions();
+  const res = P.parseBackup(JSON.stringify(P.createBackup(settings, sessions, T0)));
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.value.settings, settings);
+  assert.deepEqual(res.value.sessions, sessions);
+});
+
+test('ungültige Sicherungen werden mit Hinweis abgelehnt', () => {
+  const good = P.createBackup(P.defaultSettings(), sampleSessions(), T0);
+  const cases = [
+    'kein json',
+    JSON.stringify({ ...good, format: 'etwas-anderes' }),
+    JSON.stringify({ ...good, version: 2 }),
+    JSON.stringify({ ...good, settings: { ...good.settings, custom: { ...good.settings.custom, work: 0 } } }),
+    JSON.stringify({ ...good, sessions: [{ id: 'x' }] }),
+    JSON.stringify({ ...good, sessions: [good.sessions[0], good.sessions[0]] }),
+    JSON.stringify({ ...good, sessions: 'keine Liste' }),
+  ];
+  for (const text of cases) {
+    const res = P.parseBackup(text);
+    assert.equal(res.ok, false, text.slice(0, 40));
+    assert.equal(typeof res.error, 'string');
+  }
+});
+
+test('Import übernimmt nur bekannte Felder (fremde Zusatzdaten werden verworfen)', () => {
+  const good = P.createBackup(P.defaultSettings(), sampleSessions(), T0);
+  good.sessions[0].extra = 'x';
+  good.settings.token = 'github_pat_geheim';
+  const res = P.parseBackup(JSON.stringify(good));
+  assert.equal(res.ok, true);
+  assert.equal('extra' in res.value.sessions[0], false);
+  assert.equal('token' in res.value.settings, false);
+});

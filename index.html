@@ -467,6 +467,52 @@
             </label>
           </div>
         </div>
+        <section class="card-panel" id="settings-pomodoro-profile" aria-labelledby="settings-pomodoro-profile-title">
+          <h3 id="settings-pomodoro-profile-title">Pomodoro · Zeitprofil</h3>
+          <div class="pomo-segment" role="radiogroup" aria-label="Zeitprofil">
+            <label><input type="radio" name="pomo-profile" value="standard"> <span>Standard</span></label>
+            <label><input type="radio" name="pomo-profile" value="custom"> <span>Individuell</span></label>
+          </div>
+          <p class="setting-info pomo-profile-summary" id="pomo-profile-summary"></p>
+          <form id="pomo-profile-form" class="pomo-profile-form hidden" novalidate>
+            <div class="pomo-fields">
+              <div class="pomo-field">
+                <label for="pomo-profile-work">Lernzeit</label>
+                <div class="pomo-field-input">
+                  <input type="number" id="pomo-profile-work" inputmode="numeric" min="1" max="180" step="1" aria-describedby="pomo-profile-work-error">
+                  <span class="pomo-field-unit">min</span>
+                </div>
+                <span class="pomo-field-error" id="pomo-profile-work-error"></span>
+              </div>
+              <div class="pomo-field">
+                <label for="pomo-profile-shortBreak">Kurze Pause</label>
+                <div class="pomo-field-input">
+                  <input type="number" id="pomo-profile-shortBreak" inputmode="numeric" min="1" max="60" step="1" aria-describedby="pomo-profile-shortBreak-error">
+                  <span class="pomo-field-unit">min</span>
+                </div>
+                <span class="pomo-field-error" id="pomo-profile-shortBreak-error"></span>
+              </div>
+              <div class="pomo-field">
+                <label for="pomo-profile-longBreak">Lange Pause</label>
+                <div class="pomo-field-input">
+                  <input type="number" id="pomo-profile-longBreak" inputmode="numeric" min="1" max="60" step="1" aria-describedby="pomo-profile-longBreak-error">
+                  <span class="pomo-field-unit">min</span>
+                </div>
+                <span class="pomo-field-error" id="pomo-profile-longBreak-error"></span>
+              </div>
+              <div class="pomo-field">
+                <label for="pomo-profile-longBreakAfter">Lange Pause nach</label>
+                <div class="pomo-field-input">
+                  <input type="number" id="pomo-profile-longBreakAfter" inputmode="numeric" min="2" max="8" step="1" aria-describedby="pomo-profile-longBreakAfter-error">
+                  <span class="pomo-field-unit">Einheiten</span>
+                </div>
+                <span class="pomo-field-error" id="pomo-profile-longBreakAfter-error"></span>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-secondary btn-sm">Speichern</button>
+          </form>
+          <p class="setting-info pomo-profile-status hidden" id="pomo-profile-status" role="status"></p>
+        </section>
         <section class="card-panel" id="settings-pomodoro" aria-labelledby="settings-pomodoro-title">
           <h3 id="settings-pomodoro-title">Pomodoro · Signal</h3>
           <div class="setting-row">
@@ -499,6 +545,21 @@
           </div>
           <button type="button" class="btn btn-secondary btn-sm hidden" id="pomo-notify-btn">Mitteilungen aktivieren</button>
           <p class="setting-info pomo-notify-hint hidden" id="pomo-notify-hint"></p>
+        </section>
+        <section class="card-panel" id="settings-pomodoro-data" aria-labelledby="settings-pomodoro-data-title">
+          <h3 id="settings-pomodoro-data-title">Pomodoro · Daten</h3>
+          <p class="setting-info">Einstellungen und Verlauf werden nur lokal in diesem Browser gespeichert. Eine Sicherung schützt vor Datenverlust.</p>
+          <div class="pomo-corrupt hidden" id="pomo-corrupt" role="alert">
+            <p id="pomo-corrupt-text"></p>
+            <button type="button" class="btn btn-danger btn-sm" id="pomo-corrupt-reset">Beschädigte Daten zurücksetzen</button>
+          </div>
+          <div class="pomo-data-actions">
+            <button type="button" class="btn btn-secondary btn-sm" id="pomo-export">Sicherung exportieren</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="pomo-import">Sicherung importieren</button>
+            <button type="button" class="btn btn-danger btn-sm" id="pomo-clear">Verlauf löschen</button>
+          </div>
+          <input type="file" id="pomo-import-file" accept=".json,application/json" class="hidden">
+          <p class="setting-info pomo-data-status hidden" id="pomo-data-status" role="status"></p>
         </section>
         <div class="card-panel">
           <h3>Daten</h3>
