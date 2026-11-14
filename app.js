@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.20'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.21'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -594,6 +594,7 @@
     async init() {
       Stats.load();
       CardStore.load();
+      PomodoroUI.init(); // vor dem Kartenladen: Timer funktioniert auch ohne Karten
       const rawConfig = load(STORAGE_KEYS.config);
       this.config = this._validateConfig(rawConfig);
       if (rawConfig && !this.config) {
@@ -878,6 +879,8 @@
       if (name === 'dashboard') this._renderDashboard();
       if (name === 'stats') this._renderStats();
       if (name === 'settings') this._renderSettings();
+      if (name === 'pomodoro') PomodoroUI.render();
+      if (name === 'dashboard') PomodoroUI.renderTile();
 
       // Während des Lernens zurückgehaltenes Update jetzt einspielen
       if (name !== 'study' && this._pendingUpdate) {
@@ -1499,6 +1502,264 @@
       setTimeout(() => {
         toast.classList.remove('show');
       }, 2500);
+    },
+  };
+
+  // ===== POMODORO (Oberfläche) =====
+  // Logik und Zählregeln liegen in pomodoro.js (window.Pomodoro); hier nur Speicherung,
+  // Takt und Darstellung. Ton, Mitteilungen, Statistik und Einstellungen folgen später.
+  const PomodoroUI = {
+    settings: null,
+    state: null,
+    sessions: [],
+    corrupt: [],        // Speicherbereiche mit beschädigten Daten → werden nicht überschrieben
+    saveFailed: false,
+    notice: '',
+    returnTo: 'dashboard',
+    _timer: null,
+
+    PHASE_LABELS: { work: 'Lernzeit', shortBreak: 'Kurze Pause', longBreak: 'Lange Pause' },
+    START_LABELS: { work: 'Lernphase starten', shortBreak: 'Kurze Pause starten', longBreak: 'Lange Pause starten' },
+
+    init() {
+      const P = window.Pomodoro;
+      const read = (kind) => {
+        let raw = null;
+        try { raw = localStorage.getItem(P.STORAGE_KEYS[kind]); } catch {}
+        const res = P.parse(kind, raw);
+        if (!res.ok) this.corrupt.push(kind);
+        return res.value;
+      };
+      this.settings = read('settings') || P.defaultSettings();
+      this.sessions = read('sessions') || [];
+      this.state = read('state') || P.createInitialState();
+
+      // F04: abgelaufene Phasen beim Öffnen sofort verarbeiten
+      this._apply(P.restore(this.state, { now: Date.now(), profile: this.profile() }));
+
+      document.querySelectorAll('[data-open-pomodoro]').forEach(btn =>
+        btn.addEventListener('click', () => this.open()));
+      document.getElementById('btn-back-pomodoro').addEventListener('click', () => this.close());
+      document.getElementById('pomo-main').addEventListener('click', () => this._onMain());
+      document.getElementById('pomo-reset').addEventListener('click', () => this._onReset());
+      document.getElementById('pomo-skip').addEventListener('click', () => this._act(st => P.skipBreak(st)));
+      document.getElementById('pomo-restart').addEventListener('click', () => this._act(st => P.restartCycle(st)));
+      document.getElementById('pomo-review-done').addEventListener('click', () =>
+        this._act(st => P.resolveReview(st, { outcome: 'completed', profile: this.profile() })));
+      document.getElementById('pomo-review-aborted').addEventListener('click', () =>
+        this._act(st => P.resolveReview(st, { outcome: 'aborted', profile: this.profile() })));
+
+      // Bei Rückkehr in den Tab sofort abgleichen (Hintergrund-Timer werden gedrosselt)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this._tick();
+      });
+      this._syncTimer();
+      this.renderTile();
+    },
+
+    profile() {
+      return window.Pomodoro.activeProfile(this.settings);
+    },
+
+    isActive() {
+      return window.Pomodoro.isActive(this.state);
+    },
+
+    open() {
+      if (App.currentScreen && App.currentScreen !== 'pomodoro' && App.currentScreen !== 'loading') {
+        this.returnTo = App.currentScreen;
+      }
+      App.showScreen('pomodoro');
+    },
+
+    close() {
+      // Ohne Repository-Verbindung zurück zum Setup statt auf ein leeres Dashboard
+      const target = this.returnTo === 'dashboard' && !App.config ? 'setup' : this.returnTo;
+      App.showScreen(target || 'dashboard');
+    },
+
+    // ----- Zustandsänderungen -----
+
+    // Übernimmt ein Ergebnis aus pomodoro.js: Zustand, Protokolleintrag, Ereignis
+    _apply(res) {
+      if (!res) return;
+      this.state = res.state;
+      if (res.session) {
+        this.sessions = window.Pomodoro.appendSession(this.sessions, res.session);
+        this._save('sessions', this.sessions);
+      }
+      this._save('state', this.state);
+      if (res.event) this._onEvent(res.event);
+    },
+
+    _act(fn) {
+      const res = fn(this.state);
+      if (res.error === 'review-pending') {
+        this._setNotice('Bitte zuerst den Abschluss der letzten Lerneinheit prüfen.');
+        return this.render();
+      }
+      this.notice = '';
+      this._apply(res);
+      this._syncTimer();
+      this.render();
+      this.renderTile();
+    },
+
+    _onMain() {
+      const P = window.Pomodoro;
+      const now = Date.now();
+      switch (this.state.status) {
+        case 'idle': {
+          const topic = document.getElementById('pomo-topic').value;
+          return this._act(st => P.start(st, { now, profile: this.profile(), id: this._newId(), topic }));
+        }
+        case 'running': return this._act(st => P.pause(st, { now }));
+        case 'paused': return this._act(st => P.resume(st, { now }));
+      }
+    },
+
+    _onReset() {
+      const isWork = this.state.phase === 'work';
+      const question = isWork
+        ? 'Lernphase zurücksetzen? Sie wird als abgebrochen protokolliert.'
+        : 'Pause zurücksetzen?';
+      if (!window.confirm(question)) return;
+      this._act(st => window.Pomodoro.reset(st, { now: Date.now() }));
+    },
+
+    _onEvent(event) {
+      let text;
+      if (event.type === 'needs-review') {
+        text = 'Lernphase abgelaufen – bitte Abschluss prüfen.';
+      } else if (event.phase === 'work') {
+        text = `Lernphase beendet. Als Nächstes: ${this.PHASE_LABELS[event.next]}.`;
+      } else {
+        text = `${this.PHASE_LABELS[event.phase]} beendet. Nächste Lernphase ist bereit.`;
+      }
+      this._setNotice(text);
+      document.getElementById('pomo-announce').textContent = text; // für Screenreader
+      if (App.currentScreen !== 'pomodoro') App.showToast(text);
+    },
+
+    _setNotice(text) {
+      this.notice = text;
+    },
+
+    _newId() {
+      return (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+        : `p-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    },
+
+    // ----- Takt -----
+    // Nur während einer laufenden Phase; die Restzeit kommt immer aus der Endzeit.
+    _syncTimer() {
+      const running = this.state.status === 'running';
+      if (running && !this._timer) this._timer = setInterval(() => this._tick(), 250);
+      if (!running && this._timer) {
+        clearInterval(this._timer);
+        this._timer = null;
+      }
+    },
+
+    _tick() {
+      if (this.state.status === 'running') {
+        const res = window.Pomodoro.tick(this.state, { now: Date.now(), profile: this.profile() });
+        if (res.state !== this.state) {
+          this._apply(res);
+          this._syncTimer();
+        }
+      }
+      if (App.currentScreen === 'pomodoro') this.render();
+      if (App.currentScreen === 'dashboard') this.renderTile();
+    },
+
+    // ----- Speicherung (F09) -----
+    _save(kind, data) {
+      if (this.corrupt.includes(kind)) return; // beschädigte Daten nicht still überschreiben
+      try {
+        localStorage.setItem(window.Pomodoro.STORAGE_KEYS[kind], window.Pomodoro.serialize(data));
+        this.saveFailed = false;
+      } catch {
+        this.saveFailed = true;
+      }
+    },
+
+    // ----- Darstellung -----
+    formatTime(ms) {
+      const total = Math.ceil(ms / 1000);
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const sec = String(total % 60).padStart(2, '0');
+      return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${String(m).padStart(2, '0')}:${sec}`;
+    },
+
+    _statusText() {
+      switch (this.state.status) {
+        case 'running': return 'Läuft';
+        case 'paused': return 'Pausiert';
+        case 'review': return 'Abschluss prüfen';
+        default: return 'Bereit';
+      }
+    },
+
+    renderTile() {
+      const el = document.getElementById('pomo-tile-status');
+      if (!el) return;
+      const st = this.state;
+      const time = this.formatTime(window.Pomodoro.remainingMs(st, Date.now(), this.profile()));
+      el.textContent = st.status === 'review'
+        ? 'Abschluss prüfen'
+        : `${this.PHASE_LABELS[st.phase]} ${time} · ${this._statusText().toLowerCase()}`;
+      document.getElementById('pomo-tile').classList.toggle('is-active', this.isActive());
+    },
+
+    render() {
+      const P = window.Pomodoro;
+      const st = this.state;
+      const profile = this.profile();
+      const $ = (id) => document.getElementById(id);
+
+      $('pomo-phase').textContent = this.PHASE_LABELS[st.phase];
+      $('pomo-time').textContent = this.formatTime(P.remainingMs(st, Date.now(), profile));
+      $('pomo-status').textContent = this._statusText();
+      document.querySelector('.pomo-timer').dataset.phase = st.phase;
+
+      // Zyklusfortschritt: gefüllte Punkte = abgeschlossene Lerneinheiten
+      const total = profile.longBreakAfter;
+      const done = Math.min(st.completedInCycle, total);
+      $('pomo-cycle').innerHTML = Array.from({ length: total }, (_, i) =>
+        `<span class="pomo-dot${i < done ? ' done' : ''}"></span>`).join('');
+      $('pomo-cycle-text').textContent = `${done} von ${total} Lerneinheiten bis zur langen Pause`;
+
+      // Lernthema: vor dem Start eingeben, danach nur anzeigen
+      const editTopic = st.phase === 'work' && st.status === 'idle';
+      $('pomo-topic-wrap').classList.toggle('hidden', !editTopic);
+      $('pomo-topic-current').classList.toggle('hidden', !(st.phase === 'work' && !editTopic && st.topic));
+      $('pomo-topic-current').textContent = st.topic ? `Thema: ${st.topic}` : '';
+
+      // Hauptbutton benennt den nächsten Schritt
+      const main = $('pomo-main');
+      main.classList.toggle('hidden', st.status === 'review');
+      main.textContent = st.status === 'running' ? 'Pausieren'
+        : st.status === 'paused' ? 'Fortsetzen'
+        : this.START_LABELS[st.phase];
+
+      const isBreak = st.phase !== 'work';
+      $('pomo-reset').classList.toggle('hidden', !(st.status === 'running' || st.status === 'paused'));
+      $('pomo-skip').classList.toggle('hidden', !(isBreak && st.status !== 'review'));
+      $('pomo-restart').classList.toggle('hidden',
+        !(st.status === 'idle' && (st.phase !== 'work' || st.completedInCycle > 0)));
+      $('pomo-review').classList.toggle('hidden', st.status !== 'review');
+
+      $('pomo-notice').classList.toggle('hidden', !this.notice);
+      $('pomo-notice').textContent = this.notice;
+
+      // Speicherprobleme (F09)
+      const warn = this.saveFailed ? 'Daten werden aktuell nicht gespeichert.'
+        : this.corrupt.length ? 'Gespeicherte Pomodoro-Daten sind beschädigt und werden nicht überschrieben. Wiederherstellen oder Zurücksetzen folgt in den Einstellungen.'
+        : '';
+      $('pomo-storage-notice').classList.toggle('hidden', !warn);
+      $('pomo-storage-notice').textContent = warn;
     },
   };
 

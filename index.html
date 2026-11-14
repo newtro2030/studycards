@@ -59,6 +59,7 @@
           <button type="submit" class="btn btn-primary btn-lg">Verbinden</button>
         </form>
         <p class="setup-hint">Die App liest .md-Dateien mit <code>## Lernkarten</code>-Abschnitten aus deinem Repo.</p>
+        <button type="button" class="btn btn-secondary btn-full pomo-setup-link" data-open-pomodoro>Pomodoro-Timer öffnen</button>
       </div>
     </div>
 
@@ -122,6 +123,18 @@
           </div>
         </div>
       </div>
+
+      <!-- Pomodoro -->
+      <button type="button" class="card-panel pomo-tile" id="pomo-tile" data-open-pomodoro aria-describedby="pomo-tile-status">
+        <span class="pomo-tile-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
+        </span>
+        <span class="pomo-tile-text">
+          <span class="pomo-tile-title">Pomodoro</span>
+          <span class="pomo-tile-status" id="pomo-tile-status">Lernzeit 25:00 · bereit</span>
+        </span>
+        <svg class="pomo-tile-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
 
       <!-- Start Button -->
       <button class="btn btn-primary btn-lg btn-study" id="btn-start-study">
@@ -236,6 +249,58 @@
         <button class="btn btn-primary btn-lg" id="btn-back-dashboard">Zum Dashboard</button>
         <button class="btn btn-secondary btn-lg" id="btn-continue-study">Weiter lernen</button>
       </div>
+    </div>
+
+    <!-- ===== POMODORO ===== -->
+    <div id="pomodoro-screen" class="screen hidden">
+      <header class="study-header">
+        <button class="icon-btn" id="btn-back-pomodoro" aria-label="Zurück">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <h2 class="pomo-title">Pomodoro</h2>
+        <div style="width:40px"></div>
+      </header>
+
+      <div class="pomo-content">
+        <div id="pomo-storage-notice" class="pomo-notice pomo-notice-warn hidden" role="alert"></div>
+
+        <section class="card-panel pomo-timer" aria-labelledby="pomo-phase">
+          <p class="pomo-phase" id="pomo-phase">Lernzeit</p>
+          <div class="pomo-time" id="pomo-time" role="timer" aria-labelledby="pomo-phase">25:00</div>
+          <p class="pomo-status" id="pomo-status">Bereit</p>
+
+          <div class="pomo-cycle" id="pomo-cycle" aria-hidden="true"></div>
+          <p class="pomo-cycle-text" id="pomo-cycle-text">0 von 4 Lerneinheiten bis zur langen Pause</p>
+
+          <div class="pomo-topic" id="pomo-topic-wrap">
+            <label for="pomo-topic">Lernthema <span class="optional">(optional)</span></label>
+            <input type="text" id="pomo-topic" maxlength="100" placeholder="z. B. Rechnernetze" autocomplete="off">
+          </div>
+          <p class="pomo-topic-current hidden" id="pomo-topic-current"></p>
+        </section>
+
+        <div id="pomo-notice" class="pomo-notice hidden" role="status"></div>
+
+        <div class="pomo-review hidden" id="pomo-review" role="group" aria-labelledby="pomo-review-title">
+          <p id="pomo-review-title"><strong>Abschluss prüfen</strong></p>
+          <p class="pomo-review-text">Das Ende dieser Lerneinheit wurde erst später erkannt. Hast du sie vollständig gelernt?</p>
+          <div class="pomo-actions-row">
+            <button type="button" class="btn btn-primary" id="pomo-review-done">Abgeschlossen</button>
+            <button type="button" class="btn btn-secondary" id="pomo-review-aborted">Abgebrochen</button>
+          </div>
+        </div>
+
+        <div class="pomo-actions" id="pomo-actions">
+          <button type="button" class="btn btn-primary btn-lg" id="pomo-main">Lernphase starten</button>
+          <div class="pomo-actions-row">
+            <button type="button" class="btn btn-secondary hidden" id="pomo-reset">Zurücksetzen</button>
+            <button type="button" class="btn btn-secondary hidden" id="pomo-skip">Pause überspringen</button>
+            <button type="button" class="btn btn-secondary hidden" id="pomo-restart">Zyklus neu beginnen</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sr-only" id="pomo-announce" aria-live="polite"></div>
     </div>
 
     <!-- ===== STATS ===== -->
@@ -400,6 +465,7 @@
     </div>
 
   </div>
+  <script src="pomodoro.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
