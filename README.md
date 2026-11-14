@@ -104,6 +104,14 @@ Obsidian → Obsidian Git Plugin → GitHub Repo → StudyCards PWA
 
 Siehe [ARCHITEKTUR.md](ARCHITEKTUR.md) für eine detaillierte technische Dokumentation.
 
+**In Entwicklung:** Pomodoro-Timer – siehe [Pflichtenheft](docs/PFLICHTENHEFT_POMODORO.md).
+
+## Tests
+
+```bash
+node --test tests/
+```
+
 ## Technologie-Stack
 
 | Komponente | Technologie |
