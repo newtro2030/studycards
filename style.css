@@ -1745,3 +1745,73 @@ select:focus {
     animation: none;
   }
 }
+
+/* Kompakte Pomodoro-Leiste im Lernmodus */
+.pomo-mini {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 16px 8px;
+  padding: 6px 8px 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.pomo-mini-text {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-light);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pomo-mini[data-phase="shortBreak"] .pomo-mini-text,
+.pomo-mini[data-phase="longBreak"] .pomo-mini-text {
+  color: var(--success);
+}
+
+.pomo-mini-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.pomo-mini-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pomo-mini-btn:hover {
+  background: var(--bg-hover);
+}
+
+.pomo-mini-close {
+  padding: 6px 10px;
+  color: var(--text-secondary);
+}
+
+.pomo-mini button:focus-visible,
+#btn-study-pomodoro:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .pomo-mini {
+    margin-bottom: 4px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+}

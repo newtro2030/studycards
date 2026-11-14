@@ -66,7 +66,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.21'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.22'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -693,7 +693,11 @@
       document.getElementById('btn-start-study').addEventListener('click', () => this._startStudy());
 
       // Study
-      document.getElementById('btn-back-study').addEventListener('click', () => this.showScreen('dashboard'));
+      // Zurück-Pfeil = Kartenrunde bewusst verlassen (E6); der Weg zum Timer hält sie offen
+      document.getElementById('btn-back-study').addEventListener('click', () => {
+        this._endStudyRound();
+        this.showScreen('dashboard');
+      });
       document.getElementById('btn-show-answer').addEventListener('click', () => this._flipCard());
       document.getElementById('flashcard').addEventListener('keydown', (e) => {
         if ((e.key === 'Enter' || e.key === ' ') && e.target.id === 'flashcard') {
@@ -882,12 +886,26 @@
       if (name === 'pomodoro') PomodoroUI.render();
       if (name === 'dashboard') PomodoroUI.renderTile();
 
-      // Während des Lernens zurückgehaltenes Update jetzt einspielen
-      if (name !== 'study' && this._pendingUpdate) {
-        const apply = this._pendingUpdate;
-        this._pendingUpdate = null;
-        apply();
-      }
+      if (name === 'study') PomodoroUI.renderMini();
+      this._maybeApplyUpdate();
+    },
+
+    _endStudyRound() {
+      this.studyActive = false;
+      this._maybeApplyUpdate();
+    },
+
+    // Update nur ohne aktive Kartenrunde und ohne gestartete/ungeklärte Pomodoro-Phase –
+    // unabhängig vom sichtbaren Screen (Pflichtenheft Abschnitt 5)
+    _updateBlocked() {
+      return !!this.studyActive || PomodoroUI.isActive();
+    },
+
+    _maybeApplyUpdate() {
+      if (!this._pendingUpdate || this._updateBlocked()) return;
+      const apply = this._pendingUpdate;
+      this._pendingUpdate = null;
+      apply();
     },
 
     // ----- Dashboard -----
@@ -1138,6 +1156,7 @@
       this.sessionXP = 0;
       this.sessionCorrect = 0;
       this.sessionTotal = 0;
+      this.studyActive = true;
 
       this.showScreen('study');
       this._showCurrentCard();
@@ -1353,6 +1372,7 @@
 
     // ----- Complete Screen -----
     _showComplete() {
+      this.studyActive = false; // Runde abgeschlossen → hebt ihren Teil der Update-Sperre auf
       this.showScreen('complete');
       document.getElementById('complete-total').textContent = this.sessionTotal;
       document.getElementById('complete-xp').textContent = '+' + this.sessionXP;
@@ -1546,6 +1566,12 @@
       document.getElementById('pomo-restart').addEventListener('click', () => this._act(st => P.restartCycle(st)));
       document.getElementById('pomo-review-done').addEventListener('click', () =>
         this._act(st => P.resolveReview(st, { outcome: 'completed', profile: this.profile() })));
+      document.getElementById('pomo-mini-toggle').addEventListener('click', () => this._onMain());
+      document.getElementById('pomo-mini-next').addEventListener('click', () => this._onMain());
+      document.getElementById('pomo-mini-dismiss').addEventListener('click', () => {
+        this.notice = '';
+        this.renderMini();
+      });
       document.getElementById('pomo-review-aborted').addEventListener('click', () =>
         this._act(st => P.resolveReview(st, { outcome: 'aborted', profile: this.profile() })));
 
@@ -1573,9 +1599,12 @@
     },
 
     close() {
+      let target = this.returnTo || 'dashboard';
+      // Zurück zur Karte nur, wenn die Runde noch läuft – sie wird nicht neu gestartet (F12)
+      if (target === 'study' && !App.studyActive) target = 'dashboard';
       // Ohne Repository-Verbindung zurück zum Setup statt auf ein leeres Dashboard
-      const target = this.returnTo === 'dashboard' && !App.config ? 'setup' : this.returnTo;
-      App.showScreen(target || 'dashboard');
+      if (target === 'dashboard' && !App.config) target = 'setup';
+      App.showScreen(target);
     },
 
     // ----- Zustandsänderungen -----
@@ -1590,6 +1619,7 @@
       }
       this._save('state', this.state);
       if (res.event) this._onEvent(res.event);
+      App._maybeApplyUpdate(); // Phase beendet/zurückgesetzt → zurückgehaltenes Update ggf. jetzt
     },
 
     _act(fn) {
@@ -1603,6 +1633,7 @@
       this._syncTimer();
       this.render();
       this.renderTile();
+      this.renderMini();
     },
 
     _onMain() {
@@ -1610,7 +1641,7 @@
       const now = Date.now();
       switch (this.state.status) {
         case 'idle': {
-          const topic = document.getElementById('pomo-topic').value;
+          const topic = App.currentScreen === 'pomodoro' ? document.getElementById('pomo-topic').value : '';
           return this._act(st => P.start(st, { now, profile: this.profile(), id: this._newId(), topic }));
         }
         case 'running': return this._act(st => P.pause(st, { now }));
@@ -1638,7 +1669,8 @@
       }
       this._setNotice(text);
       document.getElementById('pomo-announce').textContent = text; // für Screenreader
-      if (App.currentScreen !== 'pomodoro') App.showToast(text);
+      if (App.currentScreen !== 'pomodoro' && App.currentScreen !== 'study') App.showToast(text);
+      this.renderMini();
     },
 
     _setNotice(text) {
@@ -1671,6 +1703,7 @@
       }
       if (App.currentScreen === 'pomodoro') this.render();
       if (App.currentScreen === 'dashboard') this.renderTile();
+      if (App.currentScreen === 'study') this.renderMini();
     },
 
     // ----- Speicherung (F09) -----
@@ -1700,6 +1733,34 @@
         case 'review': return 'Abschluss prüfen';
         default: return 'Bereit';
       }
+    },
+
+    // Kompakte Leiste im Lernmodus: laufender/pausierter Timer, offene Prüfung
+    // oder Hinweis nach Phasenende mit dem nächsten Schritt
+    renderMini() {
+      const bar = document.getElementById('pomo-mini');
+      if (!bar) return;
+      const st = this.state;
+      const $ = (id) => document.getElementById(id);
+      const showNotice = st.status === 'idle' && !!this.notice;
+      bar.classList.toggle('hidden', !(this.isActive() || showNotice));
+      bar.dataset.phase = st.phase;
+
+      const time = this.formatTime(window.Pomodoro.remainingMs(st, Date.now(), this.profile()));
+      $('pomo-mini-text').textContent =
+        st.status === 'review' ? 'Abschluss prüfen'
+        : showNotice ? this.notice
+        : `${this.PHASE_LABELS[st.phase]} ${time}${st.status === 'paused' ? ' · pausiert' : ''}`;
+
+      const toggle = $('pomo-mini-toggle');
+      const canToggle = st.status === 'running' || st.status === 'paused';
+      toggle.classList.toggle('hidden', !canToggle);
+      toggle.textContent = st.status === 'running' ? 'Pausieren' : 'Fortsetzen';
+
+      $('pomo-mini-next').classList.toggle('hidden', !showNotice);
+      $('pomo-mini-next').textContent = this.START_LABELS[st.phase];
+      $('pomo-mini-dismiss').classList.toggle('hidden', !showNotice);
+      $('pomo-mini-open').textContent = st.status === 'review' ? 'Prüfen' : 'Timer';
     },
 
     renderTile() {
@@ -1779,15 +1840,15 @@
       });
 
       // Neue Version installiert → still aktivieren (kein Hinweisbalken mehr).
-      // Nie mitten in einer Lernsitzung: dann erst beim Verlassen des Lern-Screens.
+      // Nie während einer Kartenrunde oder einer gestarteten/ungeklärten Pomodoro-Phase.
       const applyUpdate = () => {
         if (!reg.waiting) return;
         sessionStorage.setItem('sc_updated', '1');
         reg.waiting.postMessage({ type: 'SKIP_WAITING' }); // → controllerchange → Reload
       };
       const onUpdateReady = () => {
-        if (App.currentScreen === 'study') App._pendingUpdate = applyUpdate;
-        else applyUpdate();
+        App._pendingUpdate = applyUpdate;
+        App._maybeApplyUpdate();
       };
 
       if (reg.waiting && navigator.serviceWorker.controller) {

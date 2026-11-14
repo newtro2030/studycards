@@ -178,8 +178,21 @@
           <span id="study-counter">0 / 0</span>
           <span id="study-source" class="study-source"></span>
         </div>
-        <div style="width:24px"></div>
+        <button class="icon-btn" id="btn-study-pomodoro" data-open-pomodoro aria-label="Pomodoro-Timer öffnen">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
+        </button>
       </header>
+
+      <!-- Kompakte Pomodoro-Leiste: aktiver Timer oder Hinweis nach Phasenende -->
+      <div class="pomo-mini hidden" id="pomo-mini" role="region" aria-label="Pomodoro">
+        <span class="pomo-mini-text" id="pomo-mini-text"></span>
+        <div class="pomo-mini-actions">
+          <button type="button" class="pomo-mini-btn hidden" id="pomo-mini-toggle"></button>
+          <button type="button" class="pomo-mini-btn hidden" id="pomo-mini-next"></button>
+          <button type="button" class="pomo-mini-btn" id="pomo-mini-open" data-open-pomodoro>Timer</button>
+          <button type="button" class="pomo-mini-btn pomo-mini-close hidden" id="pomo-mini-dismiss" aria-label="Hinweis schließen">✕</button>
+        </div>
+      </div>
 
       <div class="study-progress-bar">
         <div class="study-progress-fill" id="study-progress-fill"></div>
