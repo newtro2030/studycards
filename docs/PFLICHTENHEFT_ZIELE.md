@@ -54,8 +54,12 @@ Die vorhandene Tag-Struktur wird unverändert genutzt:
 | 5/6 | – | kein sinnvolles Ziel; die Auswahl wird nicht angeboten |
 
 ### Z4 Prüfungsmodus
-- Für Karten eines aktiven Ziels wird der nächste Wiederholungstermin höchstens auf den letzten Puffertag vor der Prüfung gelegt. So kommt jede Karte vor der Prüfung noch einmal dran.
-- Die Bewertung der Karte selbst (SM-2) bleibt unverändert, nur das Datum wird begrenzt.
+- Eine gelernte Karte eines laufenden Ziels, deren nächster Termin nach dem Tag vor der Prüfung läge, wird **am Tag vor der Prüfung** fällig. So kommt jede Karte vor der Prüfung noch einmal dran. Ausgenommen sind Karten, die an diesem Tag schon wiederholt wurden.
+- Der Termin wird nur bei der Abfrage begrenzt und nicht gespeichert:
+  - Das gilt auch für Karten, die schon vor dem Anlegen des Ziels eingeplant waren.
+  - Nach Löschen oder Archivieren des Ziels gelten wieder die normalen Termine.
+- Die Abstände auf den Bewertungsknöpfen zeigen den tatsächlichen nächsten Termin.
+- Die Bewertung der Karte selbst (SM-2, Abstand, Wissensstand) bleibt unverändert.
 
 ### Z5 Anzeige und Gamification
 - **Startseite:** Eine Zielkarte pro aktivem Ziel steht ganz oben, vor den Stapeln. Sie zeigt:
@@ -122,3 +126,7 @@ Nach jedem Schritt folgen ein Bericht und die Prüfung (Tests, Vorschau auf 375 
   - Antippen startet eine Lernrunde nur mit den Karten dieses Ziels; „Weiter lernen“ bleibt im Ziel.
   - Der Abschluss-Bildschirm zeigt den Fortschritt der Runde.
   - Neu ist das Nachholen nie gelernter Karten in den Puffertagen (Z2).
+- **Schritt 4:** Erledigt.
+  - „Lernen starten“ und die Stapel nehmen die neuen Karten laufender Ziele nach deren Tagesplan auf.
+  - Für alle anderen Karten gilt „Neue Karten pro Tag“; dabei zählen nur Karten ohne Ziel.
+  - Der Prüfungsmodus (Z4) gilt für Fälligkeit, Zielkarten, Stapel und die Intervall-Vorschau.

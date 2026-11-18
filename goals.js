@@ -225,16 +225,20 @@
   }
 
   // ===== PRÜFUNGSMODUS (Z4) =====
-  // Begrenzt den nächsten Termin einer Karte auf den Tag vor der frühesten passenden Prüfung.
-  // Liegt diese Grenze nicht nach heute, bleibt der Termin unverändert.
-  function capReviewDate(nextReview, card, goals, today) {
-    let cap = null;
+  // Wirksamer Fälligkeitstermin einer gelernten Karte: Gehört sie zu einem laufenden Ziel und läge
+  // ihr Termin nach dem Tag vor der Prüfung, wird sie an diesem Tag fällig – es sei denn, sie wurde
+  // an diesem Tag schon wiederholt. Gespeichert wird nichts: Nach Löschen/Archivieren gilt wieder
+  // der normale Termin. Am Prüfungstag selbst wird nichts vorgezogen.
+  function effectiveDue(state, card, goals, today) {
+    let due = state.nextReview;
     for (const g of goals || []) {
-      if (g.archived || phase(g, today) === 'over' || !cardMatches(g, card)) continue;
+      if (g.archived) continue;
+      const p = phase(g, today);
+      if ((p !== 'learn' && p !== 'buffer') || !cardMatches(g, card)) continue;
       const limit = addDays(g.examDate, -1);
-      if (limit > today && (cap === null || limit < cap)) cap = limit;
+      if (due > limit && (!state.lastReview || state.lastReview < limit)) due = limit;
     }
-    return cap !== null && nextReview > cap ? cap : nextReview;
+    return due;
   }
 
   // ===== MEILENSTEINE (Z5) =====
@@ -309,7 +313,7 @@
     isDateKey, addDays, daysBetween, splitTag,
     cardMatches, goalCards, targetForGrade, validateGoal,
     isSecure, knowledge, lastLearnDay, daysLeft, phase, dailyPlan,
-    capReviewDate, newMilestones, markReached, shouldArchive, archive,
+    effectiveDue, newMilestones, markReached, shouldArchive, archive,
     serialize, parse,
   };
 });

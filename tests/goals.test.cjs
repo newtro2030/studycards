@@ -177,23 +177,35 @@ test('Ohne Puffer ist der Vortag der letzte Lerntag', () => {
 
 // ----- Z4 Prüfungsmodus -----
 
-test('Nächster Termin wird auf den Tag vor der Prüfung begrenzt', () => {
-  const g = goal();
+const st = (nextReview, lastReview) => ({ nextReview, lastReview });
+
+test('Termin nach der Prüfung wird auf den Vortag vorgezogen', () => {
+  const g = goal(); // Prüfung 04.12.
   const c = card('a', 'Mathe/Brüche');
-  assert.equal(G.capReviewDate('2026-12-20', c, [g], TODAY), '2026-12-03');
-  assert.equal(G.capReviewDate('2026-11-25', c, [g], TODAY), '2026-11-25');
-  assert.equal(G.capReviewDate('2026-12-20', card('e', 'Englisch/U'), [g], TODAY), '2026-12-20');
+  assert.equal(G.effectiveDue(st('2026-12-20', TODAY), c, [g], TODAY), '2026-12-03');
+  assert.equal(G.effectiveDue(st('2026-11-25', TODAY), c, [g], TODAY), '2026-11-25');
+  assert.equal(G.effectiveDue(st('2026-12-20', TODAY), card('e', 'Englisch/U'), [g], TODAY), '2026-12-20');
 });
 
-test('Frühere Prüfung gewinnt; archivierte und kurz bevorstehende Ziele begrenzen nicht', () => {
+test('Am Vortag wiederholt → nicht erneut vorgezogen (keine Endlosschleife)', () => {
+  const c = card('a', 'Mathe/Brüche');
+  assert.equal(G.effectiveDue(st('2026-12-09', '2026-12-03'), c, [goal()], '2026-12-03'), '2026-12-09');
+});
+
+test('Auch alte Termine von vor dem Ziel werden vorgezogen', () => {
+  const c = card('a', 'Mathe/Brüche');
+  assert.equal(G.effectiveDue(st('2027-02-01', '2026-10-01'), c, [goal()], TODAY), '2026-12-03');
+});
+
+test('Frühere Prüfung gewinnt; archivierte, vergangene und heutige Prüfungen ziehen nicht vor', () => {
   const c = card('a', 'Mathe/Brüche');
   const early = goal({ examDate: '2026-11-28' });
   const late = goal({ examDate: '2026-12-10' });
-  assert.equal(G.capReviewDate('2027-01-01', c, [late, early], TODAY), '2026-11-27');
+  assert.equal(G.effectiveDue(st('2027-01-01', TODAY), c, [late, early], TODAY), '2026-11-27');
   const archived = { ...early, archived: { on: TODAY, finalPercent: 80, actualGrade: null } };
-  assert.equal(G.capReviewDate('2027-01-01', c, [archived], TODAY), '2027-01-01');
-  // Prüfung morgen: Grenze wäre heute → keine Begrenzung
-  assert.equal(G.capReviewDate('2026-11-25', c, [goal({ examDate: '2026-11-19' })], TODAY), '2026-11-25');
+  assert.equal(G.effectiveDue(st('2027-01-01', TODAY), c, [archived], TODAY), '2027-01-01');
+  assert.equal(G.effectiveDue(st('2027-01-01', '2026-12-01'), c, [goal()], '2026-12-04'), '2027-01-01'); // Prüfungstag
+  assert.equal(G.effectiveDue(st('2027-01-01', '2026-12-01'), c, [goal()], '2026-12-05'), '2027-01-01'); // vorbei
 });
 
 // ----- Z5 Meilensteine -----

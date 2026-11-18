@@ -72,7 +72,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.30'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.31'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -531,10 +531,12 @@
       return this.states[cardId];
     },
 
-    isDue(cardId) {
+    // card (optional): mit Karte gilt der Prüfungsmodus der Lernziele (Z4)
+    isDue(cardId, card) {
       const state = this.states[cardId];
       if (!state) return false; // new card, not "due" but "new"
-      return state.nextReview <= today();
+      const due = card ? GoalsUI.effectiveDue(state, card) : state.nextReview;
+      return due <= today();
     },
 
     isNew(cardId) {
@@ -925,17 +927,9 @@
     // ----- Dashboard -----
     _renderDashboard() {
       const visibleCards = this._getFilteredCards();
-      const dueCards = visibleCards.filter(c => CardStore.isDue(c.id));
+      const dueCards = visibleCards.filter(c => CardStore.isDue(c.id, c));
       const newCards = visibleCards.filter(c => CardStore.isNew(c.id));
-      const newPerDay = this.config?.newPerDay || DEFAULT_NEW_PER_DAY;
-
-      // Tageslimit GLOBAL berechnen (über alle Karten, nicht nur gefilterte)
-      const todayNewLearned = this.allCards.filter(c => {
-        const state = CardStore.states[c.id];
-        return state && state.lastReview === today() && state.totalReviews === 1;
-      }).length;
-      const remainingNew = Math.max(0, newPerDay - todayNewLearned);
-      const availableNew = Math.min(newCards.length, remainingNew);
+      const availableNew = this._plannedNew(visibleCards).length;
 
       // Stats bar
       document.getElementById('dash-streak').textContent = Stats.data.streak;
@@ -1093,7 +1087,7 @@
       visibleCards.forEach(card => {
         if (!deckMap[card.deck]) deckMap[card.deck] = { total: 0, due: 0, new: 0 };
         deckMap[card.deck].total++;
-        if (CardStore.isDue(card.id)) deckMap[card.deck].due++;
+        if (CardStore.isDue(card.id, card)) deckMap[card.deck].due++;
         if (CardStore.isNew(card.id)) deckMap[card.deck].new++;
       });
 
@@ -1131,8 +1125,26 @@
     },
 
     // ----- Study Session -----
-    _startStudy(deckFilter) {
+    // Neue Karten für heute aus `cards`:
+    // - Karten laufender Lernziele nach deren Tagesplan (Z2),
+    // - alle übrigen nach "Neue Karten pro Tag" – dabei zählen nur Nicht-Ziel-Karten zum Limit.
+    _plannedNew(cards) {
       const newPerDay = this.config?.newPerDay || DEFAULT_NEW_PER_DAY;
+      const goalIds = GoalsUI.runningCardIds();
+      const t = today();
+      const learnedToday = this.allCards.filter(c => {
+        if (goalIds.has(c.id)) return false;
+        const state = CardStore.states[c.id];
+        return state && state.lastReview === t && state.totalReviews === 1;
+      }).length;
+      const remaining = Math.max(0, newPerDay - learnedToday);
+      const plain = cards.filter(c => CardStore.isNew(c.id) && !goalIds.has(c.id)).slice(0, remaining);
+      const inScope = new Set(cards.map(c => c.id));
+      const fromGoals = GoalsUI.plannedNewCards().filter(c => inScope.has(c.id));
+      return [...plain, ...fromGoals];
+    },
+
+    _startStudy(deckFilter) {
       this.currentGoalId = null;
 
       // Tag-Filter anwenden, dann optional Deck-Filter
@@ -1142,16 +1154,8 @@
       }
 
       // Get due cards and new cards
-      const dueCards = cards.filter(c => CardStore.isDue(c.id));
-      const newCards = cards.filter(c => CardStore.isNew(c.id));
-
-      // Limit new cards per day
-      const todayNewLearned = this.allCards.filter(c => {
-        const state = CardStore.states[c.id];
-        return state && state.lastReview === today() && state.totalReviews === 1;
-      }).length;
-      const remainingNew = Math.max(0, newPerDay - todayNewLearned);
-      const selectedNew = newCards.slice(0, remainingNew);
+      const dueCards = cards.filter(c => CardStore.isDue(c.id, c));
+      const selectedNew = this._plannedNew(cards);
 
       // Build queue: due first, then new
       this._beginRound([...dueCards, ...selectedNew], 'Keine Karten fällig!');
@@ -1236,6 +1240,7 @@
       // Show interval previews
       const state = CardStore.getState(card.id);
       const previews = SM2.previewIntervals(state);
+      for (const q of [1, 3, 4, 5]) previews[q] = GoalsUI.cappedDays(card, previews[q]);
       document.getElementById('interval-again').textContent = formatInterval(previews[1]);
       document.getElementById('interval-hard').textContent = formatInterval(previews[3]);
       document.getElementById('interval-good').textContent = formatInterval(previews[4]);
@@ -1973,6 +1978,50 @@
         btn.addEventListener('click', () => this.edit(btn.dataset.goal)));
     },
 
+    // Ziele, deren Prüfung noch nicht vorbei ist (lernen, Puffer, Prüfungstag)
+    running() {
+      if (this.corrupt) return [];
+      const t = today();
+      return this.active().filter(g => window.Goals.phase(g, t) !== 'over');
+    },
+
+    // Karten-IDs aller laufenden Ziele – diese folgen dem Ziel-Tagesplan statt dem allgemeinen Limit
+    runningCardIds() {
+      const ids = new Set();
+      for (const g of this.running()) {
+        for (const c of window.Goals.goalCards(g, App.allCards)) ids.add(c.id);
+      }
+      return ids;
+    },
+
+    // Heute geplante neue Karten aller laufenden Ziele (früheste Prüfung zuerst, ohne Doppelte)
+    plannedNewCards() {
+      const seen = new Set();
+      const out = [];
+      const list = this.running().sort((a, b) => a.examDate.localeCompare(b.examDate));
+      for (const g of list) {
+        for (const c of this.todayTask(g).newCards) {
+          if (!seen.has(c.id)) {
+            seen.add(c.id);
+            out.push(c);
+          }
+        }
+      }
+      return out;
+    },
+
+    // Prüfungsmodus (Z4)
+    effectiveDue(state, card) {
+      return this.corrupt ? state.nextReview : window.Goals.effectiveDue(state, card, this.goals, today());
+    },
+
+    // Intervall-Vorschau: Abstand bis zum tatsächlichen nächsten Termin (ggf. vorgezogen)
+    cappedDays(card, days) {
+      const t = today();
+      const due = this.effectiveDue({ nextReview: window.Goals.addDays(t, days), lastReview: t }, card);
+      return Math.min(days, window.Goals.daysBetween(t, due));
+    },
+
     // Heutige Aufgabe eines Ziels: fällige + geplante neue Karten (Z2)
     todayTask(goal) {
       const G = window.Goals;
@@ -1980,7 +2029,7 @@
       const cards = G.goalCards(goal, App.allCards);
       const states = CardStore.states;
       const knowledge = G.knowledge(goal, App.allCards, states);
-      const dueCards = cards.filter(c => CardStore.isDue(c.id));
+      const dueCards = cards.filter(c => CardStore.isDue(c.id, c));
       const fresh = cards.filter(c => CardStore.isNew(c.id));
       const learnedToday = cards.filter(c => {
         const s = states[c.id];
