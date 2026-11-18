@@ -72,7 +72,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.28'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.29'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -601,6 +601,7 @@
     async init() {
       Stats.load();
       CardStore.load();
+      GoalsUI.init();
       PomodoroUI.init(); // vor dem Kartenladen: Timer funktioniert auch ohne Karten
       const rawConfig = load(STORAGE_KEYS.config);
       this.config = this._validateConfig(rawConfig);
@@ -892,6 +893,8 @@
       if (name === 'settings') this._renderSettings();
       if (name === 'pomodoro') PomodoroUI.render();
       if (name === 'dashboard') PomodoroUI.renderTile();
+      if (name === 'dashboard') GoalsUI.renderTile();
+      if (name === 'goals') GoalsUI.renderList();
 
       if (name === 'study') PomodoroUI.renderMini();
       this._maybeApplyUpdate();
@@ -1533,6 +1536,433 @@
       setTimeout(() => {
         toast.classList.remove('show');
       }, 2500);
+    },
+  };
+
+  // ===== LERNZIELE: OBERFLÄCHE (Pflichtenheft Ziele, Z1/Z7) =====
+  // Logik steckt in goals.js (window.Goals); hier nur Speichern, Formular und Liste.
+  const GoalsUI = {
+    goals: [],
+    corrupt: false,
+    editingId: null,
+    scaleTouched: false,
+
+    init() {
+      this._load();
+      const $ = (id) => document.getElementById(id);
+
+      $('goal-tile').addEventListener('click', () => App.showScreen('goals'));
+      $('btn-back-goals').addEventListener('click', () => App.showScreen('dashboard'));
+      $('goal-new').addEventListener('click', () => this.edit(null));
+      $('btn-back-goal-edit').addEventListener('click', () => App.showScreen('goals'));
+      $('goal-corrupt-reset').addEventListener('click', () => {
+        if (!confirm('Alle gespeicherten Lernziele werden gelöscht. Fortfahren?')) return;
+        this.corrupt = false;
+        this.goals = [];
+        if (this._save()) App.showToast('Lernziele zurückgesetzt');
+        this.renderList();
+      });
+
+      $('goal-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        this._onSave();
+      });
+      $('goal-delete').addEventListener('click', () => this._onDelete());
+      // Hinweis eines Feldes verschwindet, sobald es geändert wird
+      const clearFieldError = (e) => {
+        e.target.removeAttribute('aria-invalid');
+        const err = e.target.closest('.goal-field, .pomo-field')?.querySelector('.pomo-field-error');
+        if (err) err.textContent = '';
+      };
+      $('goal-form').addEventListener('input', clearFieldError);
+      $('goal-form').addEventListener('change', clearFieldError);
+
+      $('goal-folder').addEventListener('change', () => {
+        const folder = this._selectedFolder();
+        if (!this.scaleTouched) this._setScale(this._guessScale(folder));
+        this._renderTopics(folder, []);
+        this._renderPreview();
+      });
+      document.querySelectorAll('input[name="goal-scale"]').forEach(r => r.addEventListener('change', () => {
+        this.scaleTouched = true;
+        this._renderGrades(null);
+        this._renderTargetInfo();
+        this._renderPreview();
+      }));
+      $('goal-grades').addEventListener('change', () => {
+        this._renderTargetInfo();
+        this._renderPreview();
+      });
+      $('goal-topic-list').addEventListener('change', (e) => this._onTopicChange(e.target));
+      ['goal-date', 'goal-buffer', 'goal-target'].forEach(id => $(id).addEventListener('input', () => {
+        if (id === 'goal-target') this._renderTargetInfo();
+        this._renderPreview();
+      }));
+
+      // Änderungen aus einem anderen Tab übernehmen
+      window.addEventListener('storage', (e) => {
+        if (e.key !== window.Goals.STORAGE_KEY) return;
+        this._load();
+        if (App.currentScreen === 'goals') this.renderList();
+        if (App.currentScreen === 'dashboard') this.renderTile();
+      });
+    },
+
+    // ----- Speichern (Z7) -----
+    _load() {
+      let raw = null;
+      try { raw = localStorage.getItem(window.Goals.STORAGE_KEY); } catch {}
+      const res = window.Goals.parse(raw);
+      this.corrupt = !res.ok;
+      this.goals = res.ok ? res.value : [];
+    },
+
+    _save() {
+      if (this.corrupt) return false; // beschädigte Daten nie stillschweigend überschreiben
+      try {
+        localStorage.setItem(window.Goals.STORAGE_KEY, window.Goals.serialize(this.goals));
+        return true;
+      } catch {
+        App.showToast('Speichern fehlgeschlagen – Speicher voll?');
+        return false;
+      }
+    },
+
+    active() {
+      return this.goals.filter(g => !g.archived);
+    },
+
+    // ----- Kartenumfang -----
+    // Ordner → Map(Tag → { label, count }) aus den geladenen Karten
+    _folderIndex() {
+      const index = new Map();
+      for (const card of App.allCards) {
+        if (card.tags.length === 0) {
+          if (!index.has('')) index.set('', new Map());
+          continue;
+        }
+        for (const tag of card.tags) {
+          const { folder, subject } = App._splitTag(tag);
+          if (!index.has(folder)) index.set(folder, new Map());
+          const topics = index.get(folder);
+          const entry = topics.get(tag) || { label: this._topicLabel(subject), count: 0 };
+          entry.count++;
+          topics.set(tag, entry);
+        }
+      }
+      return index;
+    },
+
+    _topicLabel(subject) {
+      return subject.replace(/[-_]/g, ' ');
+    },
+
+    _guessScale(folder) {
+      return /^semester/i.test(folder || '') ? 'uni' : 'school';
+    },
+
+    // ----- Formular -----
+    edit(id) {
+      const G = window.Goals;
+      const goal = id ? this.goals.find(g => g.id === id) : null;
+      this.editingId = goal ? goal.id : null;
+      const $ = (x) => document.getElementById(x);
+
+      $('goal-edit-title').textContent = goal ? 'Ziel bearbeiten' : 'Neues Ziel';
+      $('goal-delete').classList.toggle('hidden', !goal);
+      this._clearErrors();
+
+      // Fachauswahl
+      const index = this._folderIndex();
+      const folders = [...index.keys()];
+      if (goal && !index.has(goal.folder)) folders.push(goal.folder);
+      folders.sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, 'de', { numeric: true }));
+      $('goal-folder').innerHTML = folders.length
+        ? folders.map(f => `<option value="${escapeHTML(f)}">${escapeHTML(App._folderLabel(f))}${index.has(f) ? '' : ' (keine Karten)'}</option>`).join('')
+        : '<option value="" disabled>Keine Karten geladen</option>';
+
+      let folder, topics;
+      if (goal) {
+        folder = goal.folder;
+        topics = goal.topics;
+      } else {
+        folder = App.currentFolderFilter !== null && index.has(App.currentFolderFilter) ? App.currentFolderFilter : (folders[0] ?? '');
+        topics = App.currentTagFilter && App._splitTag(App.currentTagFilter).folder === folder ? [App.currentTagFilter] : [];
+      }
+      $('goal-folder').value = folder;
+
+      this.scaleTouched = !!goal;
+      this._setScale(goal ? goal.scale : this._guessScale(folder));
+      this._renderTopics(folder, topics);
+      this._renderGrades(goal ? goal.grade : null);
+
+      $('goal-name').value = goal ? goal.name : '';
+      $('goal-date').min = G.addDays(today(), 1);
+      $('goal-date').value = goal ? goal.examDate : '';
+      $('goal-buffer').value = goal ? goal.bufferDays : G.DEFAULT_BUFFER_DAYS;
+      // Zielmarke nur anzeigen, wenn sie von der Note abweicht (= eigene Eingabe)
+      const fromGrade = goal && goal.grade !== null ? G.targetForGrade(goal.scale, goal.grade) : null;
+      $('goal-target').value = goal && goal.targetPercent !== fromGrade ? goal.targetPercent : '';
+
+      this._renderTargetInfo();
+      this._renderPreview();
+      App.showScreen('goal-edit');
+      if (!goal) $('goal-name').focus({ preventScroll: true });
+    },
+
+    _selectedFolder() {
+      return document.getElementById('goal-folder').value;
+    },
+
+    _selectedScale() {
+      const r = document.querySelector('input[name="goal-scale"]:checked');
+      return r ? r.value : 'school';
+    },
+
+    _setScale(scale) {
+      document.querySelectorAll('input[name="goal-scale"]').forEach(r => { r.checked = r.value === scale; });
+      this._renderGrades(null);
+    },
+
+    _selectedGrade() {
+      const r = document.querySelector('input[name="goal-grade"]:checked');
+      return r ? r.value : null;
+    },
+
+    _renderGrades(selected) {
+      const scale = window.Goals.SCALES[this._selectedScale()];
+      document.getElementById('goal-grades').innerHTML = scale.grades.map(g =>
+        `<label class="goal-grade"><input type="radio" name="goal-grade" value="${escapeHTML(g)}"${g === selected ? ' checked' : ''}><span>${escapeHTML(g)}</span></label>`
+      ).join('');
+    },
+
+    _renderTopics(folder, selected) {
+      const topics = this._folderIndex().get(folder) || new Map();
+      const sorted = [...topics.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label, 'de', { numeric: true }));
+      const total = App.allCards.filter(c => window.Goals.cardMatches({ folder, topics: [] }, c)).length;
+      const chip = (value, label, count, checked) =>
+        `<label class="goal-topic"><input type="checkbox" value="${escapeHTML(value)}"${checked ? ' checked' : ''}><span>${escapeHTML(label)} <small>${count}</small></span></label>`;
+      // Gespeicherte Themen, die es nicht mehr gibt, bleiben wählbar
+      const missing = selected.filter(t => !topics.has(t));
+      document.getElementById('goal-topic-list').innerHTML =
+        chip('*', 'Alle Themen', total, selected.length === 0) +
+        sorted.map(([tag, t]) => chip(tag, t.label, t.count, selected.includes(tag))).join('') +
+        missing.map(tag => chip(tag, this._topicLabel(App._splitTag(tag).subject), 0, true)).join('');
+    },
+
+    _onTopicChange(input) {
+      const boxes = [...document.querySelectorAll('#goal-topic-list input')];
+      const all = boxes.find(b => b.value === '*');
+      if (input === all && all.checked) {
+        boxes.forEach(b => { if (b !== all) b.checked = false; });
+      } else if (input !== all && input.checked) {
+        all.checked = false;
+      }
+      if (!boxes.some(b => b.checked)) all.checked = true;
+      this._renderPreview();
+    },
+
+    _selectedTopics() {
+      return [...document.querySelectorAll('#goal-topic-list input:checked')]
+        .map(b => b.value).filter(v => v !== '*');
+    },
+
+    _formInput() {
+      const $ = (x) => document.getElementById(x);
+      return {
+        name: $('goal-name').value,
+        folder: this._selectedFolder(),
+        topics: this._selectedTopics(),
+        examDate: $('goal-date').value,
+        scale: this._selectedScale(),
+        grade: this._selectedGrade(),
+        targetPercent: $('goal-target').value.trim(),
+        bufferDays: $('goal-buffer').value.trim(),
+      };
+    },
+
+    _renderTargetInfo() {
+      const G = window.Goals;
+      const el = document.getElementById('goal-target-info');
+      const own = document.getElementById('goal-target').value.trim();
+      const grade = this._selectedGrade();
+      if (own) {
+        el.textContent = `Eigene Zielmarke: ${own} % sicher gelernte Karten.`;
+      } else if (grade) {
+        el.textContent = `Note ${grade} ≙ ${G.targetForGrade(this._selectedScale(), grade)} % sicher gelernte Karten – eine Richtschnur, keine Garantie.`;
+      } else {
+        el.textContent = 'Wähle deine Wunschnote – daraus ergibt sich, wie viel du sicher können solltest.';
+      }
+    },
+
+    // Vorschau: Umfang und Tagesplan aus den aktuellen Eingaben
+    _renderPreview() {
+      const G = window.Goals;
+      const el = document.getElementById('goal-preview');
+      const input = this._formInput();
+      const probe = { folder: input.folder, topics: input.topics };
+      const k = G.knowledge(probe, App.allCards, CardStore.states);
+      el.classList.remove('is-warn');
+
+      if (k.total === 0) {
+        el.textContent = 'Für diese Auswahl gibt es keine Karten.';
+        el.classList.add('is-warn');
+        return;
+      }
+      const parts = [`<strong>${k.total} Karten</strong>, davon ${k.newCount} neu`];
+      const buffer = parseInt(input.bufferDays, 10);
+      if (G.isDateKey(input.examDate) && input.examDate > today() && Number.isInteger(buffer) && buffer >= 0 && buffer <= 14) {
+        const goal = { examDate: input.examDate, bufferDays: buffer };
+        const days = G.daysLeft(goal, today());
+        parts.push(days === 1 ? 'Prüfung morgen' : `noch ${days} Tage bis zur Prüfung`);
+        const plan = G.dailyPlan(goal, { newCount: k.newCount, today: today() });
+        if (plan.phase !== 'learn') {
+          parts.push('nur noch Wiederholung (Puffertage)');
+        } else if (k.newCount > 0) {
+          parts.push(`ca. <strong>${plan.quota} neue ${plan.quota === 1 ? 'Karte' : 'Karten'} pro Tag</strong>`);
+          if (plan.tight) {
+            parts.push(`eigentlich ${plan.needed} pro Tag nötig – der Plan wird knapp`);
+            el.classList.add('is-warn');
+          }
+        }
+      }
+      el.innerHTML = parts.join(' · ');
+    },
+
+    _clearErrors() {
+      document.querySelectorAll('#goal-form .pomo-field-error').forEach(e => { e.textContent = ''; });
+      document.querySelectorAll('#goal-form [aria-invalid]').forEach(e => e.removeAttribute('aria-invalid'));
+    },
+
+    _showErrors(errors, input) {
+      // Fehler → Anzeigeort; "Note oder Zielmarke fehlt" gehört zur Note, solange keine Zielmarke eingegeben ist
+      const map = {
+        name: ['goal-name-error', 'goal-name'],
+        folder: ['goal-folder-error', 'goal-folder'],
+        topics: ['goal-topics-error', null],
+        examDate: ['goal-examDate-error', 'goal-date'],
+        scale: ['goal-grade-error', null],
+        grade: ['goal-grade-error', null],
+        bufferDays: ['goal-bufferDays-error', 'goal-buffer'],
+        targetPercent: input.targetPercent ? ['goal-targetPercent-error', 'goal-target'] : ['goal-grade-error', null],
+      };
+      let first = null;
+      for (const [field, msg] of Object.entries(errors)) {
+        const [errId, inputId] = map[field] || [];
+        if (!errId) continue;
+        document.getElementById(errId).textContent = msg;
+        const target = inputId ? document.getElementById(inputId) : document.getElementById(errId).closest('.goal-field');
+        if (inputId) target.setAttribute('aria-invalid', 'true');
+        if (!first) first = target;
+      }
+      if (first) {
+        first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (first.focus && first.matches('input, select')) first.focus({ preventScroll: true });
+      }
+    },
+
+    _onSave() {
+      const G = window.Goals;
+      if (this.corrupt) {
+        App.showToast('Lernziele sind beschädigt – bitte erst zurücksetzen');
+        return;
+      }
+      this._clearErrors();
+      const input = this._formInput();
+      const existing = this.editingId ? this.goals.find(g => g.id === this.editingId) : null;
+      // Bestehendes Ziel mit unverändertem Datum darf auch am Prüfungstag noch umbenannt werden
+      const checkDate = !(existing && existing.examDate === input.examDate);
+      const res = G.validateGoal(input, {
+        today: checkDate ? today() : undefined,
+        id: existing ? existing.id : 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        createdAt: existing ? existing.createdAt : today(),
+      });
+      if (!res.ok) {
+        this._showErrors(res.errors, input);
+        return;
+      }
+      let goal = res.value;
+      if (existing) {
+        // Meilensteine behalten; bei geänderter Zielmarke nur die weiterhin gültigen
+        const reached = existing.reached.filter(m => goal.targetPercent === existing.targetPercent ||
+          (m !== 'target' && m < goal.targetPercent));
+        goal = { ...goal, reached, archived: existing.archived };
+        this.goals = this.goals.map(g => (g.id === goal.id ? goal : g));
+      } else {
+        this.goals = [...this.goals, goal];
+      }
+      if (!this._save()) return;
+      App.showToast(existing ? 'Ziel gespeichert' : 'Ziel festgelegt 🎯');
+      App.showScreen('goals');
+    },
+
+    _onDelete() {
+      const goal = this.goals.find(g => g.id === this.editingId);
+      if (!goal || !confirm(`Ziel „${goal.name}“ löschen? Deine Karten und dein Lernfortschritt bleiben erhalten.`)) return;
+      this.goals = this.goals.filter(g => g.id !== goal.id);
+      if (!this._save()) return;
+      App.showToast('Ziel gelöscht');
+      App.showScreen('goals');
+    },
+
+    // ----- Anzeige -----
+    _formatDate(key) {
+      const [y, m, d] = key.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+    },
+
+    _scopeLabel(goal) {
+      const folder = App._folderLabel(goal.folder);
+      if (goal.topics.length === 0) return folder;
+      return folder + ' · ' + goal.topics.map(t => this._topicLabel(App._splitTag(t).subject)).join(', ');
+    },
+
+    _daysBadge(goal) {
+      const days = window.Goals.daysLeft(goal, today());
+      if (days > 1) return `<strong>${days}</strong>Tage`;
+      if (days === 1) return '<strong>1</strong>Tag';
+      if (days === 0) return '<strong>heute</strong>';
+      return '<strong>✓</strong>vorbei';
+    },
+
+    renderList() {
+      const G = window.Goals;
+      document.getElementById('goal-corrupt').classList.toggle('hidden', !this.corrupt);
+      document.getElementById('goal-new').disabled = this.corrupt;
+      const list = this.active().sort((a, b) => a.examDate.localeCompare(b.examDate) || a.name.localeCompare(b.name, 'de'));
+      document.getElementById('goal-empty').classList.toggle('hidden', list.length > 0 || this.corrupt);
+      const container = document.getElementById('goal-list');
+      container.innerHTML = list.map(goal => {
+        const k = G.knowledge(goal, App.allCards, CardStore.states);
+        const grade = goal.grade !== null ? `Note ${escapeHTML(goal.grade)} · ` : '';
+        return `<button type="button" class="card-panel goal-row" data-goal="${escapeHTML(goal.id)}" aria-label="${escapeHTML(goal.name)} bearbeiten">
+          <span class="goal-row-text">
+            <span class="goal-row-name">${escapeHTML(goal.name)}</span>
+            <span class="goal-row-meta">${escapeHTML(this._scopeLabel(goal))}</span>
+            <span class="goal-row-meta">${escapeHTML(this._formatDate(goal.examDate))} · ${grade}${k.percent} % von ${goal.targetPercent} %</span>
+          </span>
+          <span class="goal-row-badge">${this._daysBadge(goal)}</span>
+        </button>`;
+      }).join('');
+      container.querySelectorAll('[data-goal]').forEach(btn =>
+        btn.addEventListener('click', () => this.edit(btn.dataset.goal)));
+    },
+
+    renderTile() {
+      const el = document.getElementById('goal-tile-status');
+      const list = this.active().sort((a, b) => a.examDate.localeCompare(b.examDate));
+      if (this.corrupt) {
+        el.textContent = 'Daten beschädigt – bitte prüfen';
+      } else if (list.length === 0) {
+        el.textContent = 'Ziel festlegen – z. B. für eine Prüfung';
+      } else {
+        const next = list[0];
+        const days = window.Goals.daysLeft(next, today());
+        const when = days > 1 ? `noch ${days} Tage` : days === 1 ? 'morgen' : days === 0 ? 'heute' : 'vorbei';
+        el.textContent = list.length === 1
+          ? `${next.name} · ${when}`
+          : `${list.length} Ziele · nächstes: ${next.name} · ${when}`;
+      }
     },
   };
 

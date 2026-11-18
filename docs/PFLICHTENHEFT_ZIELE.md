@@ -110,3 +110,9 @@ Nach jedem Schritt folgen ein Bericht und die Prüfung (Tests, Vorschau auf 375 
   - `today()` und alle Tagesschlüssel rechnen mit lokalem Datum.
   - SM-2 speichert zusätzlich `lastQuality`.
   - `goals.js` enthält die reine Logik, `tests/goals.test.cjs` 25 Tests.
+- **Schritt 2:** Erledigt.
+  - Die Startseiten-Kachel „Lernziele“ führt zur Zielliste.
+  - Das Formular hat die Felder Name, Bereich Schule/Studium, Fach, Themen (Mehrfachauswahl), Prüfungsdatum, Wunschnote, Puffertage und eine optionale Zielmarke.
+  - Eine Vorschau zeigt Kartenzahl und neue Karten pro Tag.
+  - Ziele lassen sich bearbeiten und löschen.
+  - Beschädigte Daten werden erkannt und nicht überschrieben.

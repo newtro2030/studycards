@@ -124,6 +124,18 @@
         </div>
       </div>
 
+      <!-- Lernziele -->
+      <button type="button" class="card-panel pomo-tile goal-tile" id="goal-tile" aria-describedby="goal-tile-status">
+        <span class="pomo-tile-icon goal-tile-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
+        </span>
+        <span class="pomo-tile-text">
+          <span class="pomo-tile-title">Lernziele</span>
+          <span class="pomo-tile-status" id="goal-tile-status">Ziel festlegen</span>
+        </span>
+        <svg class="pomo-tile-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+
       <!-- Pomodoro -->
       <button type="button" class="card-panel pomo-tile" id="pomo-tile" data-open-pomodoro aria-describedby="pomo-tile-status">
         <span class="pomo-tile-icon" aria-hidden="true">
@@ -316,6 +328,106 @@
       </div>
 
       <div class="sr-only" id="pomo-announce" aria-live="polite"></div>
+    </div>
+
+    <!-- ===== LERNZIELE: LISTE ===== -->
+    <div id="goals-screen" class="screen hidden">
+      <header class="study-header">
+        <button class="icon-btn" id="btn-back-goals" aria-label="Zurück">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <h2 class="pomo-title">Lernziele</h2>
+        <span class="icon-btn-spacer" aria-hidden="true"></span>
+      </header>
+      <div class="goal-content">
+        <div id="goal-corrupt" class="pomo-notice pomo-notice-warn hidden" role="alert">
+          <p>Die gespeicherten Lernziele sind beschädigt und können nicht gelesen werden.</p>
+          <button type="button" class="btn btn-danger btn-sm" id="goal-corrupt-reset">Lernziele zurücksetzen</button>
+        </div>
+        <div id="goal-list" class="goal-list"></div>
+        <p class="goal-empty hidden" id="goal-empty">Lege ein Ziel fest – zum Beispiel eine Klassenarbeit oder Prüfung. StudyCards plant dann, wie viele Karten du jeden Tag lernen solltest.</p>
+        <button type="button" class="btn btn-primary btn-lg" id="goal-new">Neues Ziel festlegen</button>
+      </div>
+    </div>
+
+    <!-- ===== LERNZIELE: FORMULAR ===== -->
+    <div id="goal-edit-screen" class="screen hidden">
+      <header class="study-header">
+        <button class="icon-btn" id="btn-back-goal-edit" aria-label="Abbrechen">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+        <h2 class="pomo-title" id="goal-edit-title">Neues Ziel</h2>
+        <span class="icon-btn-spacer" aria-hidden="true"></span>
+      </header>
+      <form class="goal-content goal-form" id="goal-form" novalidate>
+        <section class="card-panel">
+          <div class="goal-field">
+            <label for="goal-name">Name</label>
+            <input type="text" id="goal-name" maxlength="60" placeholder="z. B. Mathearbeit Brüche" autocomplete="off" aria-describedby="goal-name-error">
+            <span class="pomo-field-error" id="goal-name-error"></span>
+          </div>
+
+          <div class="goal-field">
+            <span class="goal-label" id="goal-scale-label">Bereich</span>
+            <div class="pomo-segment" role="radiogroup" aria-labelledby="goal-scale-label">
+              <label><input type="radio" name="goal-scale" value="school"> <span>Schule</span></label>
+              <label><input type="radio" name="goal-scale" value="uni"> <span>Studium</span></label>
+            </div>
+          </div>
+
+          <div class="goal-field">
+            <label for="goal-folder">Fach</label>
+            <select id="goal-folder" aria-describedby="goal-folder-error"></select>
+            <span class="pomo-field-error" id="goal-folder-error"></span>
+          </div>
+
+          <fieldset class="goal-field goal-topics" aria-describedby="goal-topics-error">
+            <legend class="goal-label">Themen</legend>
+            <div id="goal-topic-list" class="goal-topic-list"></div>
+            <span class="pomo-field-error" id="goal-topics-error"></span>
+          </fieldset>
+
+          <div class="goal-field">
+            <label for="goal-date">Prüfungsdatum</label>
+            <input type="date" id="goal-date" aria-describedby="goal-examDate-error">
+            <span class="pomo-field-error" id="goal-examDate-error"></span>
+          </div>
+        </section>
+
+        <section class="card-panel">
+          <div class="goal-field">
+            <span class="goal-label" id="goal-grade-label">Wunschnote</span>
+            <div class="goal-grades" id="goal-grades" role="radiogroup" aria-labelledby="goal-grade-label" aria-describedby="goal-grade-error"></div>
+            <span class="pomo-field-error" id="goal-grade-error"></span>
+            <p class="setting-info goal-target-info" id="goal-target-info"></p>
+          </div>
+
+          <div class="pomo-fields">
+            <div class="pomo-field">
+              <label for="goal-buffer">Puffertage</label>
+              <div class="pomo-field-input">
+                <input type="number" id="goal-buffer" inputmode="numeric" min="0" max="14" step="1" aria-describedby="goal-buffer-hint goal-bufferDays-error">
+                <span class="pomo-field-unit">Tage</span>
+              </div>
+              <span class="pomo-field-error" id="goal-bufferDays-error"></span>
+            </div>
+            <div class="pomo-field">
+              <label for="goal-target">Zielmarke <span class="optional">(optional)</span></label>
+              <div class="pomo-field-input">
+                <input type="number" id="goal-target" inputmode="numeric" min="10" max="100" step="1" aria-describedby="goal-targetPercent-error">
+                <span class="pomo-field-unit">%</span>
+              </div>
+              <span class="pomo-field-error" id="goal-targetPercent-error"></span>
+            </div>
+          </div>
+          <p class="setting-info" id="goal-buffer-hint">In den Puffertagen vor der Prüfung kommen keine neuen Karten mehr – nur Wiederholung.</p>
+        </section>
+
+        <p class="goal-preview" id="goal-preview" aria-live="polite"></p>
+
+        <button type="submit" class="btn btn-primary btn-lg" id="goal-save">Ziel speichern</button>
+        <button type="button" class="btn btn-danger btn-full hidden" id="goal-delete">Ziel löschen</button>
+      </form>
     </div>
 
     <!-- ===== STATS ===== -->
@@ -603,6 +715,7 @@
 
   </div>
   <script src="pomodoro.js"></script>
+  <script src="goals.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
