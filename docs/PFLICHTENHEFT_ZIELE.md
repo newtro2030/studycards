@@ -38,6 +38,7 @@ Die vorhandene Tag-Struktur wird unverändert genutzt:
 - Für Karten eines Ziels **ersetzt** diese Zahl die Einstellung „Neue Karten pro Tag“. Für alle übrigen Karten gilt die Einstellung weiter.
 - Die Zahl ist auf höchstens 60 neue Karten pro Tag und Ziel gedeckelt. Liegt der Bedarf darüber, zeigt das Ziel den Hinweis „Plan wird knapp“.
 - Fällige Wiederholungen werden immer zusätzlich angezeigt.
+- **Nachholen:** Gibt es in den Puffertagen oder am Prüfungstag noch nie gelernte Karten, etwa bei Rückstand oder einem spät angelegten Ziel, kommen sie sofort, höchstens 60 pro Tag. Sonst blieben sie bis zur Prüfung ungelernt.
 
 ### Z3 Wissensstand und Wunschnote
 - Eine Karte gilt als **sicher**, wenn ihre letzte Antwort mindestens „Gut“ war und ihr Abstand mindestens 3 Tage beträgt.
@@ -116,3 +117,8 @@ Nach jedem Schritt folgen ein Bericht und die Prüfung (Tests, Vorschau auf 375 
   - Eine Vorschau zeigt Kartenzahl und neue Karten pro Tag.
   - Ziele lassen sich bearbeiten und löschen.
   - Beschädigte Daten werden erkannt und nicht überschrieben.
+- **Schritt 3:** Erledigt.
+  - Zielkarten stehen oben auf der Startseite. Sie zeigen Countdown (orange ab 3 Tagen), Fortschrittsbalken (hell: angefangen, Verlauf: sicher, Strich: Zielmarke) und die Tagesaufgabe mit „Los ›“.
+  - Antippen startet eine Lernrunde nur mit den Karten dieses Ziels; „Weiter lernen“ bleibt im Ziel.
+  - Der Abschluss-Bildschirm zeigt den Fortschritt der Runde.
+  - Neu ist das Nachholen nie gelernter Karten in den Puffertagen (Z2).

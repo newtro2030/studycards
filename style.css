@@ -2472,3 +2472,222 @@ select:focus {
 #goal-delete.hidden {
   display: none;
 }
+
+/* Zielkarten auf der Startseite (Z5) */
+.goal-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.goal-cards:empty {
+  display: none;
+}
+
+.goal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 16px 18px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-color: rgba(124, 58, 237, 0.45);
+  background: linear-gradient(160deg, rgba(124, 58, 237, 0.14), rgba(6, 182, 212, 0.06)), var(--bg-surface);
+  transition: border-color 0.2s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.goal-card:hover {
+  border-color: var(--accent);
+}
+
+.goal-card:active {
+  transform: scale(0.99);
+}
+
+.goal-card:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+.goal-card.is-reached {
+  border-color: rgba(16, 185, 129, 0.6);
+  background: linear-gradient(160deg, rgba(16, 185, 129, 0.14), rgba(6, 182, 212, 0.06)), var(--bg-surface);
+}
+
+.goal-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.goal-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.goal-card-name {
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.goal-card-scope {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.goal-card-countdown {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.2);
+  color: var(--accent-light);
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-card-countdown strong {
+  font-size: 15px;
+}
+
+.goal-card-countdown.is-urgent {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warning);
+}
+
+/* Fortschrittsbalken: angefangen (hell) + sicher (Verlauf) + Zielmarke */
+.goal-bar {
+  position: relative;
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+  overflow: visible;
+}
+
+.goal-bar-started,
+.goal-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 6px;
+  transition: width 0.6s ease;
+}
+
+.goal-bar-started {
+  background: rgba(167, 139, 250, 0.28);
+}
+
+.goal-bar-fill {
+  background: var(--gradient);
+}
+
+.goal-card.is-reached .goal-bar-fill {
+  background: linear-gradient(135deg, #10b981, #06b6d4);
+}
+
+.goal-bar-target {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--text);
+  box-shadow: 0 0 0 2px var(--bg-surface);
+}
+
+.goal-card-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.goal-card-row strong {
+  color: var(--text);
+}
+
+.goal-card-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.goal-card-task.is-done {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.goal-card-task.is-warn,
+.goal-card-warn {
+  color: var(--warning);
+}
+
+.goal-card-task.is-muted {
+  color: var(--text-secondary);
+}
+
+.goal-card-go {
+  margin-left: auto;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--gradient);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.goal-card-warn {
+  font-size: 13px;
+}
+
+/* Abschluss einer Ziel-Runde */
+.complete-goal {
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.complete-goal strong {
+  color: var(--text);
+}
+
+.complete-goal .is-done {
+  color: var(--success);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goal-bar-started,
+  .goal-bar-fill,
+  .goal-card {
+    transition: none;
+  }
+}
+
+.goal-card-task-text {
+  min-width: 0;
+}

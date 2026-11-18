@@ -200,16 +200,27 @@
   // ===== TAGESPLAN (Z2) =====
   // learnedToday = heute erstmals gelernte Karten dieses Ziels.
   // Der Bedarf wird inkl. der heute schon gelernten Karten berechnet → bleibt über den Tag stabil.
+  // In Puffertagen und am Prüfungstag gibt es planmäßig keine neuen Karten. Sind aber noch nie
+  // gelernte Karten übrig (Rückstand oder spät angelegtes Ziel), werden sie sofort nachgeholt (catchUp).
   function dailyPlan(goal, { newCount, learnedToday = 0, today }) {
     const p = phase(goal, today);
-    if (p !== 'learn') return { phase: p, learnDays: 0, needed: 0, quota: 0, remainingToday: 0, tight: false };
+    if (p === 'over') return { phase: p, learnDays: 0, needed: 0, quota: 0, remainingToday: 0, tight: false, catchUp: false };
+    if (p !== 'learn') {
+      const needed = newCount + learnedToday;
+      const quota = Math.min(needed, MAX_NEW_PER_DAY);
+      return {
+        phase: p, learnDays: 0, needed, quota,
+        remainingToday: Math.max(0, Math.min(quota - learnedToday, newCount)),
+        tight: needed > MAX_NEW_PER_DAY, catchUp: newCount > 0,
+      };
+    }
     const learnDays = daysBetween(today, lastLearnDay(goal)) + 1;
     const needed = Math.ceil((newCount + learnedToday) / learnDays);
     const quota = Math.min(needed, MAX_NEW_PER_DAY);
     return {
       phase: p, learnDays, needed, quota,
       remainingToday: Math.max(0, Math.min(quota - learnedToday, newCount)),
-      tight: needed > MAX_NEW_PER_DAY,
+      tight: needed > MAX_NEW_PER_DAY, catchUp: false,
     };
   }
 

@@ -72,7 +72,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.29'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.30'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -732,7 +732,10 @@
 
       // Complete
       document.getElementById('btn-back-dashboard').addEventListener('click', () => this.showScreen('dashboard'));
-      document.getElementById('btn-continue-study').addEventListener('click', () => this._startStudy());
+      document.getElementById('btn-continue-study').addEventListener('click', () => {
+        if (this.currentGoalId) this._startGoalStudy(this.currentGoalId);
+        else this._startStudy();
+      });
 
       // Settings
       document.getElementById('btn-change-repo').addEventListener('click', () => {
@@ -894,6 +897,7 @@
       if (name === 'pomodoro') PomodoroUI.render();
       if (name === 'dashboard') PomodoroUI.renderTile();
       if (name === 'dashboard') GoalsUI.renderTile();
+      if (name === 'dashboard') GoalsUI.renderCards();
       if (name === 'goals') GoalsUI.renderList();
 
       if (name === 'study') PomodoroUI.renderMini();
@@ -1129,6 +1133,7 @@
     // ----- Study Session -----
     _startStudy(deckFilter) {
       const newPerDay = this.config?.newPerDay || DEFAULT_NEW_PER_DAY;
+      this.currentGoalId = null;
 
       // Tag-Filter anwenden, dann optional Deck-Filter
       let cards = this._getFilteredCards();
@@ -1149,10 +1154,26 @@
       const selectedNew = newCards.slice(0, remainingNew);
 
       // Build queue: due first, then new
-      this.studyQueue = [...dueCards, ...selectedNew];
+      this._beginRound([...dueCards, ...selectedNew], 'Keine Karten fällig!');
+    },
+
+    // Lernrunde nur mit den Karten eines Ziels – neue Karten nach dessen Tagesplan (Z2)
+    _startGoalStudy(goalId) {
+      const goal = GoalsUI.goals.find(g => g.id === goalId);
+      if (!goal) return;
+      const task = GoalsUI.todayTask(goal);
+      this.currentGoalId = goal.id;
+      this.goalRoundStart = task.knowledge;
+      const empty = task.knowledge.total === 0 ? 'Für dieses Ziel gibt es keine Karten.'
+        : task.plan.phase === 'learn' ? 'Tagesziel schon erledigt ✓' : 'Heute ist nichts fällig ✓';
+      this._beginRound([...task.dueCards, ...task.newCards], empty);
+    },
+
+    _beginRound(queue, emptyMessage) {
+      this.studyQueue = queue;
 
       if (this.studyQueue.length === 0) {
-        this.showToast('Keine Karten fällig!');
+        this.showToast(emptyMessage);
         return;
       }
 
@@ -1390,6 +1411,7 @@
         ? Math.round((this.sessionCorrect / this.sessionTotal) * 100)
         : 0;
       document.getElementById('complete-accuracy').textContent = accuracy + '%';
+      GoalsUI.renderComplete(this.currentGoalId, this.goalRoundStart);
     },
 
     // ----- Stats Screen -----
@@ -1604,7 +1626,7 @@
         if (e.key !== window.Goals.STORAGE_KEY) return;
         this._load();
         if (App.currentScreen === 'goals') this.renderList();
-        if (App.currentScreen === 'dashboard') this.renderTile();
+        if (App.currentScreen === 'dashboard') { this.renderTile(); this.renderCards(); }
       });
     },
 
@@ -1817,7 +1839,10 @@
         parts.push(days === 1 ? 'Prüfung morgen' : `noch ${days} Tage bis zur Prüfung`);
         const plan = G.dailyPlan(goal, { newCount: k.newCount, today: today() });
         if (plan.phase !== 'learn') {
-          parts.push('nur noch Wiederholung (Puffertage)');
+          parts.push(k.newCount > 0
+            ? `Puffertage schon erreicht – die neuen Karten werden sofort nachgeholt (bis ${G.MAX_NEW_PER_DAY} pro Tag)`
+            : 'nur noch Wiederholung (Puffertage)');
+          if (k.newCount > 0) el.classList.add('is-warn');
         } else if (k.newCount > 0) {
           parts.push(`ca. <strong>${plan.quota} neue ${plan.quota === 1 ? 'Karte' : 'Karten'} pro Tag</strong>`);
           if (plan.tight) {
@@ -1948,6 +1973,121 @@
         btn.addEventListener('click', () => this.edit(btn.dataset.goal)));
     },
 
+    // Heutige Aufgabe eines Ziels: fällige + geplante neue Karten (Z2)
+    todayTask(goal) {
+      const G = window.Goals;
+      const t = today();
+      const cards = G.goalCards(goal, App.allCards);
+      const states = CardStore.states;
+      const knowledge = G.knowledge(goal, App.allCards, states);
+      const dueCards = cards.filter(c => CardStore.isDue(c.id));
+      const fresh = cards.filter(c => CardStore.isNew(c.id));
+      const learnedToday = cards.filter(c => {
+        const s = states[c.id];
+        return s && s.lastReview === t && s.totalReviews === 1;
+      }).length;
+      const plan = G.dailyPlan(goal, { newCount: fresh.length, learnedToday, today: t });
+      const newCards = fresh.slice(0, plan.remainingToday);
+      return { knowledge, plan, dueCards, newCards, learnedToday, done: dueCards.length === 0 && newCards.length === 0 };
+    },
+
+    _countdown(goal) {
+      const days = window.Goals.daysLeft(goal, today());
+      if (days > 1) return { html: `<strong>${days}</strong> Tage`, urgent: days <= 3 };
+      if (days === 1) return { html: '<strong>morgen</strong>', urgent: true };
+      if (days === 0) return { html: '<strong>heute</strong>', urgent: true };
+      return { html: 'vorbei', urgent: false };
+    },
+
+    // Zeile "Heute …" einer Zielkarte
+    _taskLine(task) {
+      const { plan, dueCards, newCards, knowledge } = task;
+      const n = (count, one, many) => `<strong>${count}</strong> ${count === 1 ? one : many}`;
+      if (knowledge.total === 0) return { html: 'Keine Karten für dieses Ziel gefunden', state: 'warn' };
+      if (plan.phase === 'over') return { html: 'Prüfung vorbei', state: 'muted' };
+      if (plan.catchUp && newCards.length) {
+        const parts = [n(newCards.length, 'neue Karte', 'neue Karten')];
+        if (dueCards.length) parts.push(n(dueCards.length, 'Wiederholung', 'Wiederholungen'));
+        return { html: 'Nachholen: ' + parts.join(' · '), state: 'todo' };
+      }
+      if (plan.phase === 'exam') {
+        return dueCards.length
+          ? { html: `Heute ist Prüfung – viel Erfolg! 🍀 Noch ${n(dueCards.length, 'Wiederholung', 'Wiederholungen')}`, state: 'todo' }
+          : { html: 'Heute ist Prüfung – viel Erfolg! 🍀', state: 'done' };
+      }
+      if (plan.phase === 'buffer') {
+        return dueCards.length
+          ? { html: `Puffertag: ${n(dueCards.length, 'Wiederholung', 'Wiederholungen')}`, state: 'todo' }
+          : { html: '✓ Puffertag – heute nichts fällig', state: 'done' };
+      }
+      if (task.done) return { html: '✓ Tagesziel erledigt', state: 'done' };
+      const parts = [];
+      if (newCards.length) parts.push(n(newCards.length, 'neue Karte', 'neue Karten'));
+      if (dueCards.length) parts.push(n(dueCards.length, 'Wiederholung', 'Wiederholungen'));
+      return { html: 'Heute: ' + parts.join(' · '), state: 'todo' };
+    },
+
+    renderCards() {
+      const container = document.getElementById('goal-cards');
+      const list = this.corrupt ? [] : this.active().sort((a, b) => a.examDate.localeCompare(b.examDate) || a.name.localeCompare(b.name, 'de'));
+      container.innerHTML = list.map(goal => {
+        const task = this.todayTask(goal);
+        const k = task.knowledge;
+        const started = k.total ? Math.floor(((k.total - k.newCount) / k.total) * 100) : 0;
+        const reached = k.percent >= goal.targetPercent;
+        const cd = this._countdown(goal);
+        const line = this._taskLine(task);
+        const target = goal.grade !== null ? `Ziel: Note ${escapeHTML(goal.grade)} · ${goal.targetPercent} %` : `Ziel: ${goal.targetPercent} %`;
+        const tight = task.plan.tight
+          ? `<span class="goal-card-warn">Plan wird knapp: eigentlich ${task.plan.needed} neue Karten pro Tag nötig</span>` : '';
+        return `<button type="button" class="card-panel goal-card${reached ? ' is-reached' : ''}" data-goal-study="${escapeHTML(goal.id)}">
+          <span class="goal-card-head">
+            <span class="goal-card-title">
+              <span class="goal-card-name">${escapeHTML(goal.name)}</span>
+              <span class="goal-card-scope">${escapeHTML(this._scopeLabel(goal))}</span>
+            </span>
+            <span class="goal-card-countdown${cd.urgent ? ' is-urgent' : ''}">${cd.html}</span>
+          </span>
+          <span class="goal-bar" role="progressbar" aria-label="Wissensstand ${escapeHTML(goal.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${k.percent}" aria-valuetext="${k.percent} % sicher, Ziel ${goal.targetPercent} %">
+            <span class="goal-bar-started" style="width:${started}%"></span>
+            <span class="goal-bar-fill" style="width:${k.percent}%"></span>
+            <span class="goal-bar-target" style="left:${goal.targetPercent}%" aria-hidden="true"></span>
+          </span>
+          <span class="goal-card-row">
+            <span><strong>${k.percent} %</strong> sicher · ${started} % angefangen</span>
+            <span>${target}</span>
+          </span>
+          <span class="goal-card-task is-${line.state}"><span class="goal-card-task-text">${line.html}</span>${line.state === 'todo' ? '<span class="goal-card-go" aria-hidden="true">Los ›</span>' : ''}</span>
+          ${tight}
+        </button>`;
+      }).join('');
+      container.querySelectorAll('[data-goal-study]').forEach(btn =>
+        btn.addEventListener('click', () => App._startGoalStudy(btn.dataset.goalStudy)));
+    },
+
+    // Abschluss einer Ziel-Runde: Fortschritt seit Rundenbeginn
+    renderComplete(goalId, before) {
+      const el = document.getElementById('complete-goal');
+      const goal = goalId ? this.goals.find(g => g.id === goalId) : null;
+      if (!goal) {
+        el.classList.add('hidden');
+        return;
+      }
+      const task = this.todayTask(goal);
+      const k = task.knowledge;
+      const pct = (x) => (x.total ? Math.floor(((x.total - x.newCount) / x.total) * 100) : 0);
+      const startedNow = pct(k);
+      const startedBefore = before ? pct(before) : startedNow;
+      const parts = [`🎯 <strong>${escapeHTML(goal.name)}</strong>`];
+      parts.push(startedNow > startedBefore
+        ? `angefangen ${startedBefore} % → <strong>${startedNow} %</strong>`
+        : `${startedNow} % angefangen`);
+      parts.push(`${k.percent} % sicher (Ziel ${goal.targetPercent} %)`);
+      const line = this._taskLine(task);
+      el.innerHTML = parts.join(' · ') + `<br><span class="is-${line.state}">${line.html}</span>`;
+      el.classList.remove('hidden');
+    },
+
     renderTile() {
       const el = document.getElementById('goal-tile-status');
       const list = this.active().sort((a, b) => a.examDate.localeCompare(b.examDate));
@@ -1956,12 +2096,7 @@
       } else if (list.length === 0) {
         el.textContent = 'Ziel festlegen – z. B. für eine Prüfung';
       } else {
-        const next = list[0];
-        const days = window.Goals.daysLeft(next, today());
-        const when = days > 1 ? `noch ${days} Tage` : days === 1 ? 'morgen' : days === 0 ? 'heute' : 'vorbei';
-        el.textContent = list.length === 1
-          ? `${next.name} · ${when}`
-          : `${list.length} Ziele · nächstes: ${next.name} · ${when}`;
+        el.textContent = `${list.length} ${list.length === 1 ? 'aktives Ziel' : 'aktive Ziele'} · verwalten oder neues Ziel`;
       }
     },
   };

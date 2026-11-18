@@ -150,10 +150,23 @@ test('Am letzten Lerntag kommen alle restlichen Karten, gedeckelt auf 60', () =>
   assert.equal(tight.tight, true);
 });
 
-test('Puffertage: keine neuen Karten', () => {
-  const plan = G.dailyPlan(goal(), { newCount: 30, today: '2026-12-02' });
+test('Puffertage: keine neuen Karten, wenn alles gelernt ist', () => {
+  const plan = G.dailyPlan(goal(), { newCount: 0, today: '2026-12-02' });
   assert.equal(plan.phase, 'buffer');
   assert.equal(plan.quota, 0);
+  assert.equal(plan.catchUp, false);
+});
+
+test('Puffertage und Prüfungstag: nie gelernte Karten werden nachgeholt', () => {
+  const plan = G.dailyPlan(goal(), { newCount: 30, today: '2026-12-02' });
+  assert.equal(plan.catchUp, true);
+  assert.equal(plan.quota, 30);
+  assert.equal(plan.remainingToday, 30);
+  const late = G.dailyPlan(goal(), { newCount: 80, learnedToday: 10, today: '2026-12-04' });
+  assert.equal(late.phase, 'exam');
+  assert.equal(late.remainingToday, 50); // 60 pro Tag, 10 schon gelernt
+  assert.equal(late.tight, true);
+  assert.equal(G.dailyPlan(goal(), { newCount: 30, today: '2026-12-05' }).quota, 0); // vorbei
 });
 
 test('Ohne Puffer ist der Vortag der letzte Lerntag', () => {
