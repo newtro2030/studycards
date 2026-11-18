@@ -23,6 +23,8 @@
   const SECURE_MIN_INTERVAL = 3;       // Z3: "sicher" ab 3 Tagen Abstand
   const SECURE_MIN_QUALITY = 4;        // Z3: letzte Antwort mindestens "Gut"
   const MILESTONES = [25, 50, 75];     // Z5
+  const DAILY_DONE_KEEP = 366;         // Z5: gespeicherte Tage mit erledigtem Tagesziel
+  const BONUS_XP = { milestone: 15, daily: 25, target: 100 }; // Z5
 
   // Z3: Wunschnote → Zielmarke in %
   const SCALES = {
@@ -152,6 +154,7 @@
         id: id || null, name, folder, topics, examDate, scale, grade, targetPercent, bufferDays,
         createdAt: createdAt || today || null,
         reached: [],          // erreichte Meilensteine (25/50/75/'target'), damit jeder nur einmal feiert
+        dailyDone: [],        // Tage mit erledigtem Tagesziel (für Bonus-XP und Serie)
         archived: null,       // { on, finalPercent, actualGrade } nach Z6
       },
     };
@@ -255,6 +258,25 @@
     return { ...goal, reached: [...new Set([...(goal.reached || []), ...milestones])] };
   }
 
+  // ===== TAGESZIEL & SERIE (Z5) =====
+  function markDailyDone(goal, today) {
+    const days = goal.dailyDone || [];
+    if (days.includes(today)) return goal;
+    return { ...goal, dailyDone: [...days, today].sort().slice(-DAILY_DONE_KEEP) };
+  }
+
+  // Tage in Folge mit erledigtem Tagesziel – zählt ab heute oder (noch offen) ab gestern
+  function dailyStreak(goal, today) {
+    const days = new Set(goal.dailyDone || []);
+    let day = days.has(today) ? today : addDays(today, -1);
+    let n = 0;
+    while (days.has(day)) {
+      n++;
+      day = addDays(day, -1);
+    }
+    return n;
+  }
+
   // ===== ARCHIV (Z6) =====
   function shouldArchive(goal, today) {
     return !goal.archived && phase(goal, today) === 'over';
@@ -271,6 +293,8 @@
     const check = validateGoal(g, { id: g.id, createdAt: g.createdAt });
     if (!check.ok) return false;
     if (!Array.isArray(g.reached) || !g.reached.every(m => m === 'target' || MILESTONES.includes(m))) return false;
+    // dailyDone fehlt bei Zielen aus v1.29–v1.31 → gültig, wird als [] geladen
+    if (g.dailyDone !== undefined && (!Array.isArray(g.dailyDone) || !g.dailyDone.every(isDateKey))) return false;
     if (g.archived !== null) {
       const a = g.archived;
       if (!a || !isDateKey(a.on) || !Number.isInteger(a.finalPercent) || a.finalPercent < 0 || a.finalPercent > 100) return false;
@@ -285,6 +309,7 @@
       id: g.id, name: g.name.trim(), folder: g.folder, topics: [...g.topics], examDate: g.examDate,
       scale: g.scale, grade: g.grade === null ? null : String(g.grade), targetPercent: g.targetPercent,
       bufferDays: g.bufferDays, createdAt: g.createdAt ?? null, reached: [...g.reached],
+      dailyDone: [...new Set(g.dailyDone || [])].sort().slice(-DAILY_DONE_KEEP),
       archived: g.archived ? { on: g.archived.on, finalPercent: g.archived.finalPercent, actualGrade: g.archived.actualGrade ?? null } : null,
     };
   }
@@ -309,11 +334,11 @@
 
   return {
     SCHEMA_VERSION, STORAGE_KEY, NAME_MAX_LENGTH, MAX_NEW_PER_DAY, DEFAULT_BUFFER_DAYS, BUFFER_LIMITS,
-    TARGET_LIMITS, MILESTONES, SCALES, GRADE_TARGETS,
+    TARGET_LIMITS, MILESTONES, SCALES, GRADE_TARGETS, BONUS_XP,
     isDateKey, addDays, daysBetween, splitTag,
     cardMatches, goalCards, targetForGrade, validateGoal,
     isSecure, knowledge, lastLearnDay, daysLeft, phase, dailyPlan,
-    effectiveDue, newMilestones, markReached, shouldArchive, archive,
+    effectiveDue, newMilestones, markReached, markDailyDone, dailyStreak, shouldArchive, archive,
     serialize, parse,
   };
 });

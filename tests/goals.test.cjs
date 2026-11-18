@@ -226,6 +226,30 @@ test('Meilensteine über der Zielmarke entfallen', () => {
   assert.deepEqual(G.newMilestones(g, 55), [25, 'target']);
 });
 
+test('Tagesziel wird je Tag einmal vermerkt', () => {
+  let g = goal();
+  assert.deepEqual(g.dailyDone, []);
+  g = G.markDailyDone(g, TODAY);
+  assert.deepEqual(g.dailyDone, [TODAY]);
+  assert.equal(G.markDailyDone(g, TODAY), g);
+});
+
+test('Serie zählt Tage in Folge, ab heute oder ab gestern', () => {
+  let g = goal();
+  for (const d of ['2026-11-14', '2026-11-16', '2026-11-17']) g = G.markDailyDone(g, d);
+  assert.equal(G.dailyStreak(g, '2026-11-18'), 2); // heute noch offen → 16.+17.
+  assert.equal(G.dailyStreak(G.markDailyDone(g, '2026-11-18'), '2026-11-18'), 3);
+  assert.equal(G.dailyStreak(g, '2026-11-19'), 0); // gestern ausgelassen
+});
+
+test('Ziele aus v1.29–v1.31 ohne dailyDone bleiben ladbar', () => {
+  const { dailyDone, ...old } = goal();
+  const res = G.parse(G.serialize([old]));
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.value[0].dailyDone, []);
+  assert.deepEqual(G.parse(G.serialize([{ ...goal(), dailyDone: ['gestern'] }])), { ok: false, corrupt: true });
+});
+
 // ----- Z6 Archiv -----
 
 test('Am Tag nach der Prüfung wird archiviert', () => {

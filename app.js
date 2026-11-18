@@ -72,7 +72,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.31'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.32'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -429,6 +429,13 @@
       return this.data.xp % XP_PER_LEVEL;
     },
 
+    // Bonus-XP für Lernziele (Z5) – zählt nicht als Wiederholung
+    addBonus(xp) {
+      this.data.xp += xp;
+      this.save();
+      return xp;
+    },
+
     addReview(quality) {
       const d = this.data;
       const t = today();
@@ -604,6 +611,7 @@
       Stats.load();
       CardStore.load();
       GoalsUI.init();
+      Celebrate.init();
       PomodoroUI.init(); // vor dem Kartenladen: Timer funktioniert auch ohne Karten
       const rawConfig = load(STORAGE_KEYS.config);
       this.config = this._validateConfig(rawConfig);
@@ -1370,6 +1378,11 @@
       // Stats
       const xpEarned = Stats.addReview(quality);
       this.sessionXP += xpEarned;
+
+      // Lernziele: Meilensteine, Tagesziel, Zielmarke (Z5)
+      const goalEvents = GoalsUI.afterRating(card);
+      this.sessionXP += goalEvents.reduce((sum, e) => sum + e.xp, 0);
+      Celebrate.show(goalEvents);
       this.sessionTotal++;
       if (quality >= 3) this.sessionCorrect++;
 
@@ -1916,7 +1929,7 @@
         // Meilensteine behalten; bei geänderter Zielmarke nur die weiterhin gültigen
         const reached = existing.reached.filter(m => goal.targetPercent === existing.targetPercent ||
           (m !== 'target' && m < goal.targetPercent));
-        goal = { ...goal, reached, archived: existing.archived };
+        goal = { ...goal, reached, archived: existing.archived, dailyDone: existing.dailyDone };
         this.goals = this.goals.map(g => (g.id === goal.id ? goal : g));
       } else {
         this.goals = [...this.goals, goal];
@@ -2022,6 +2035,36 @@
       return Math.min(days, window.Goals.daysBetween(t, due));
     },
 
+    // Nach einer Bewertung: neu erreichte Meilensteine und erledigte Tagesziele der Ziele dieser Karte.
+    // Vergibt Bonus-XP und speichert, damit jedes Ereignis nur einmal gefeiert wird.
+    afterRating(card) {
+      const G = window.Goals;
+      const t = today();
+      const events = [];
+      let changed = false;
+      this.goals = this.goals.map(goal => {
+        if (goal.archived || G.phase(goal, t) === 'over' || !G.cardMatches(goal, card)) return goal;
+        let g = goal;
+        const k = G.knowledge(g, App.allCards, CardStore.states);
+        const ms = G.newMilestones(g, k.percent);
+        if (ms.length) {
+          g = G.markReached(g, ms);
+          const target = ms.includes('target');
+          events.push({ type: target ? 'target' : 'milestone', goal: g, percent: k.percent,
+            milestone: target ? g.targetPercent : Math.max(...ms.filter(m => m !== 'target')),
+            xp: Stats.addBonus(target ? G.BONUS_XP.target : G.BONUS_XP.milestone) });
+        }
+        if (!(g.dailyDone || []).includes(t) && this.todayTask(g).done) {
+          g = G.markDailyDone(g, t);
+          events.push({ type: 'daily', goal: g, streak: G.dailyStreak(g, t), xp: Stats.addBonus(G.BONUS_XP.daily) });
+        }
+        if (g !== goal) changed = true;
+        return g;
+      });
+      if (changed) this._save();
+      return events;
+    },
+
     // Heutige Aufgabe eines Ziels: fällige + geplante neue Karten (Z2)
     todayTask(goal) {
       const G = window.Goals;
@@ -2037,7 +2080,11 @@
       }).length;
       const plan = G.dailyPlan(goal, { newCount: fresh.length, learnedToday, today: t });
       const newCards = fresh.slice(0, plan.remainingToday);
-      return { knowledge, plan, dueCards, newCards, learnedToday, done: dueCards.length === 0 && newCards.length === 0 };
+      return {
+        knowledge, plan, dueCards, newCards, learnedToday,
+        done: dueCards.length === 0 && newCards.length === 0,
+        streak: G.dailyStreak(goal, t),
+      };
     },
 
     _countdown(goal) {
@@ -2067,13 +2114,13 @@
       if (plan.phase === 'buffer') {
         return dueCards.length
           ? { html: `Puffertag: ${n(dueCards.length, 'Wiederholung', 'Wiederholungen')}`, state: 'todo' }
-          : { html: '✓ Puffertag – heute nichts fällig', state: 'done' };
+          : { html: '✓ Puffertag – heute nichts fällig' + (task.streak > 1 ? ` · 🔥 ${task.streak} Tage in Folge` : ''), state: 'done' };
       }
-      if (task.done) return { html: '✓ Tagesziel erledigt', state: 'done' };
+      if (task.done) return { html: '✓ Tagesziel erledigt' + (task.streak > 1 ? ` · 🔥 ${task.streak} Tage in Folge` : ''), state: 'done' };
       const parts = [];
       if (newCards.length) parts.push(n(newCards.length, 'neue Karte', 'neue Karten'));
       if (dueCards.length) parts.push(n(dueCards.length, 'Wiederholung', 'Wiederholungen'));
-      return { html: 'Heute: ' + parts.join(' · '), state: 'todo' };
+      return { html: 'Heute: ' + parts.join(' · ') + (task.streak > 1 ? ` · 🔥 ${task.streak}` : ''), state: 'todo' };
     },
 
     renderCards() {
@@ -2147,6 +2194,145 @@
       } else {
         el.textContent = `${list.length} ${list.length === 1 ? 'aktives Ziel' : 'aktive Ziele'} · verwalten oder neues Ziel`;
       }
+    },
+  };
+
+  // ===== LERNZIELE: FEIERN (Z5) =====
+  // Konfetti (eigene Canvas-Animation, keine Bibliothek), Banner für Meilenstein/Tagesziel,
+  // große Anzeige beim Erreichen der Zielmarke. "Bewegung reduzieren" → kein Konfetti.
+  const Celebrate = {
+    COLORS: ['#7c3aed', '#a78bfa', '#06b6d4', '#10b981', '#f59e0b', '#f472b6'],
+    _bannerTimer: null,
+    _returnFocus: null,
+
+    init() {
+      document.getElementById('celebrate-close').addEventListener('click', () => this.close());
+      document.getElementById('celebrate').addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') this.close();
+        if (e.key === 'Tab') { // Fokus bleibt im Dialog (nur ein Knopf)
+          e.preventDefault();
+          document.getElementById('celebrate-close').focus();
+        }
+      });
+    },
+
+    reducedMotion() {
+      return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    },
+
+    show(events) {
+      if (!events.length) return;
+      const targets = events.filter(e => e.type === 'target');
+      const others = events.filter(e => e.type !== 'target');
+      if (targets.length) {
+        this.overlay(targets, others);
+      } else {
+        this.banner(others);
+      }
+    },
+
+    _line(e) {
+      const name = escapeHTML(e.goal.name);
+      if (e.type === 'daily') {
+        const streak = e.streak > 1 ? ` · 🔥 ${e.streak} Tage in Folge` : '';
+        return `✓ Tagesziel erledigt: <strong>${name}</strong> · +${e.xp} XP${streak}`;
+      }
+      if (e.type === 'milestone') return `🎯 <strong>${name}</strong>: ${e.milestone} % sicher geschafft! · +${e.xp} XP`;
+      return '';
+    },
+
+    banner(events) {
+      const el = document.getElementById('goal-banner');
+      el.innerHTML = events.map(e => `<span>${this._line(e)}</span>`).join('');
+      el.classList.remove('hidden');
+      el.classList.remove('show');
+      void el.offsetWidth; // Animation neu starten
+      el.classList.add('show');
+      clearTimeout(this._bannerTimer);
+      this._bannerTimer = setTimeout(() => {
+        el.classList.remove('show');
+        this._bannerTimer = setTimeout(() => el.classList.add('hidden'), 300);
+      }, 3200);
+      this.confetti(events.some(e => e.type === 'daily') ? 70 : 40);
+    },
+
+    overlay(targets, others) {
+      const e = targets[0];
+      const g = e.goal;
+      const reach = g.grade !== null
+        ? `Note ${escapeHTML(g.grade)} ist in Reichweite!`
+        : `Zielmarke ${g.targetPercent} % erreicht!`;
+      document.getElementById('celebrate-title').textContent = 'Ziel erreicht!';
+      document.getElementById('celebrate-text').innerHTML =
+        `<strong>${escapeHTML(g.name)}</strong>: ${e.percent} % sicher gelernt.<br>${reach}`;
+      const xp = targets.reduce((s, t) => s + t.xp, 0) + others.reduce((s, o) => s + o.xp, 0);
+      const extra = others.map(o => this._line(o)).filter(Boolean);
+      document.getElementById('celebrate-xp').innerHTML = `+${xp} XP` + (extra.length ? `<small>${extra.join('<br>')}</small>` : '');
+      this._returnFocus = document.activeElement;
+      document.getElementById('celebrate').classList.remove('hidden');
+      document.getElementById('celebrate-close').focus({ preventScroll: true });
+      this.confetti(180);
+    },
+
+    close() {
+      document.getElementById('celebrate').classList.add('hidden');
+      if (this._returnFocus && document.contains(this._returnFocus)) this._returnFocus.focus({ preventScroll: true });
+      this._returnFocus = null;
+    },
+
+    confetti(count) {
+      if (this.reducedMotion()) return;
+      const canvas = document.createElement('canvas');
+      canvas.className = 'confetti-canvas';
+      canvas.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(canvas);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = window.innerWidth, h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const parts = Array.from({ length: count }, () => ({
+        x: w / 2 + (Math.random() - 0.5) * w * 0.3,
+        y: h * 0.35,
+        vx: (Math.random() - 0.5) * 14,
+        vy: -Math.random() * 14 - 5,
+        size: 5 + Math.random() * 6,
+        rot: Math.random() * Math.PI,
+        vr: (Math.random() - 0.5) * 0.3,
+        color: this.COLORS[Math.floor(Math.random() * this.COLORS.length)],
+        round: Math.random() < 0.3,
+      }));
+      const start = performance.now();
+      const DURATION = 2600;
+      const frame = (now) => {
+        const t = now - start;
+        ctx.clearRect(0, 0, w, h);
+        ctx.globalAlpha = t > DURATION - 600 ? Math.max(0, (DURATION - t) / 600) : 1;
+        for (const p of parts) {
+          p.vy += 0.35;      // Schwerkraft
+          p.vx *= 0.99;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.rot += p.vr;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          if (p.round) {
+            ctx.beginPath();
+            ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+          }
+          ctx.restore();
+        }
+        if (t < DURATION) requestAnimationFrame(frame);
+        else canvas.remove();
+      };
+      requestAnimationFrame(frame);
     },
   };
 

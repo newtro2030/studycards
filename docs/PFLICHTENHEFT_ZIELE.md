@@ -130,3 +130,11 @@ Nach jedem Schritt folgen ein Bericht und die Prüfung (Tests, Vorschau auf 375 
   - „Lernen starten“ und die Stapel nehmen die neuen Karten laufender Ziele nach deren Tagesplan auf.
   - Für alle anderen Karten gilt „Neue Karten pro Tag“; dabei zählen nur Karten ohne Ziel.
   - Der Prüfungsmodus (Z4) gilt für Fälligkeit, Zielkarten, Stapel und die Intervall-Vorschau.
+- **Schritt 5:** Erledigt.
+  - Nach jeder Bewertung werden die Ziele dieser Karte ausgewertet.
+  - **Meilenstein** 25/50/75 %: Banner und +15 XP.
+  - **Tagesziel erledigt:** Banner, kleines Konfetti, +25 XP; Serie „🔥 n Tage in Folge“ auf der Zielkarte.
+  - **Zielmarke erreicht:** große Anzeige „Ziel erreicht! Note … ist in Reichweite!“, großes Konfetti, +100 XP.
+  - Jedes Ereignis wird nur einmal gefeiert (`reached`, `dailyDone`).
+  - Bei „Bewegung reduzieren“ gibt es kein Konfetti.
+  - Ziele aus v1.29–v1.31 ohne `dailyDone` bleiben gültig.
