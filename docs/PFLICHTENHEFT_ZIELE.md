@@ -73,15 +73,15 @@ Die vorhandene Tag-Struktur wird unverändert genutzt:
 - Das Konfetti ist selbst gebaut, ohne externe Bibliothek, und bei „Bewegung reduzieren“ abgeschwächt.
 
 ### Z6 Archiv
-- Am Tag nach dem Prüfungsdatum wandert ein Ziel automatisch ins Archiv. Manuell geht das auch früher, etwa wenn die Arbeit verschoben wird.
-- Im Archiv stehen der erreichte Wissensstand am Prüfungstag und die Zielmarke.
+- Am Tag nach dem Prüfungsdatum wandert ein Ziel automatisch ins Archiv, sobald die Startseite mit geladenen Karten angezeigt wird. Manuell geht das auch früher, etwa wenn die Arbeit verschoben wird.
+- Im Archiv stehen der beim Archivieren festgehaltene Wissensstand (in der Regel der Stand am Ende des Prüfungstags) und die Zielmarke.
 - Optional lässt sich die tatsächliche Note eintragen.
 - Archivierte Ziele lassen sich löschen oder als neues Ziel kopieren.
 - Die Karten selbst laufen nach dem Archivieren normal weiter.
 
 ### Z7 Daten
 - Die Ziele werden lokal gespeichert, versioniert wie beim Pomodoro (`sc_goals`, `{version, data}`). Sie gelten pro Gerät.
-- Die Sicherung wird um die Ziele erweitert, also Export und Import.
+- Die Ziele haben eine **eigene Sicherung** im Lernziele-Bildschirm (Format `studycards-goals-backup`), getrennt von der Pomodoro-Sicherung, damit ein Pomodoro-Import keine Ziele überschreibt. Ein Import ersetzt alle Ziele des Geräts, nach Rückfrage.
 
 ## 4. Technische Vorarbeit (gefunden bei der Prüfung)
 
@@ -138,3 +138,31 @@ Nach jedem Schritt folgen ein Bericht und die Prüfung (Tests, Vorschau auf 375 
   - Jedes Ereignis wird nur einmal gefeiert (`reached`, `dailyDone`).
   - Bei „Bewegung reduzieren“ gibt es kein Konfetti.
   - Ziele aus v1.29–v1.31 ohne `dailyDone` bleiben gültig.
+- **Schritt 6:** Erledigt.
+  - Automatisches und manuelles Archivieren.
+  - Archivliste mit festgehaltenem Wissensstand, Zielmarke und Wunschnote, dazu die echte Note: Schule 1–6, Studium 1,0–5,0.
+  - „Als neues Ziel“ kopiert Fach, Themen, Note und Puffer, ohne Datum.
+  - Archivierte Ziele lassen sich löschen.
+  - Eigene Sicherung mit Export und Import.
+  - README und ARCHITEKTUR sind aktualisiert.
+
+## 8. Abnahme-Checkliste (Umsetzung v1.33)
+
+Je Gerät prüfen: iPhone (Home-Bildschirm-App), Safari (Mac) und Chrome.
+
+| Nr. | Prüfung | Erwartung |
+|---|---|---|
+| Z-A1 | Update auf v1.33 (Einstellungen → Nach Updates suchen) | Kachel „Lernziele“ auf der Startseite |
+| Z-A2 | Ziel anlegen: Fach, Thema, Datum, Wunschnote | Vorschau zeigt Karten und neue Karten pro Tag; nach dem Speichern erscheint die Zielkarte oben |
+| Z-A3 | Pflichtfelder leer lassen und speichern | Klare Hinweise an den Feldern, nichts gespeichert |
+| Z-A4 | Zielkarte antippen und Runde beenden | Nur Karten des Ziels; Abschluss zeigt Fortschritt; Banner „Tagesziel erledigt“ mit Konfetti |
+| Z-A5 | „Lernen starten“ mit Ziel und anderen Fächern | Ziel-Karten nach Tagesplan plus übrige Karten nach „Neue Karten pro Tag“ |
+| Z-A6 | Am nächsten Tag | Neuer Tagesplan; Serie 🔥 nach zwei Tagen in Folge |
+| Z-A7 | Ziel bearbeiten (Name, Datum, Note) und löschen | Änderungen sofort auf der Zielkarte; Lernfortschritt bleibt |
+| Z-A8 | Ziel mit Prüfung in 2 Tagen anlegen | „Nachholen: … neue Karten“ |
+| Z-A9 | Tag vor der Prüfung | Alle Ziel-Karten fällig, die nicht gerade erst wiederholt wurden; danach nicht erneut |
+| Z-A10 | Tag nach der Prüfung | Hinweis „… ist ins Archiv gewandert“; im Archiv: Wissensstand, Note eintragbar |
+| Z-A11 | Archiv: „Als neues Ziel“ | Formular vorbelegt, Datum leer |
+| Z-A12 | Sicherung exportieren und auf anderem Gerät importieren | Gleiche Ziele (iPhone: Teilen-Menü / Dateien) |
+| Z-A13 | „Bewegung reduzieren“ (iPhone: Einstellungen → Bedienungshilfen) | Kein Konfetti, Anzeigen erscheinen trotzdem |
+| Z-A14 | VoiceOver: Zielkarte, Formular, Anzeige „Ziel erreicht“ | Alles vorgelesen und bedienbar |

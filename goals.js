@@ -14,6 +14,7 @@
 
   const SCHEMA_VERSION = 1;
   const STORAGE_KEY = 'sc_goals';
+  const BACKUP_FORMAT = 'studycards-goals-backup';
 
   const NAME_MAX_LENGTH = 60;
   const MAX_NEW_PER_DAY = 60;          // Z2: Obergrenze pro Ziel und Tag
@@ -30,6 +31,11 @@
   const SCALES = {
     school: { label: 'Schule', grades: ['1', '2', '3', '4'] },
     uni: { label: 'Studium', grades: ['1,0', '1,3', '1,7', '2,0', '2,3', '2,7', '3,0', '3,3', '3,7', '4,0'] },
+  };
+  // Z6: tatsächliche Note im Archiv (inkl. Noten unterhalb des Zielbereichs)
+  const ACTUAL_GRADES = {
+    school: ['1', '2', '3', '4', '5', '6'],
+    uni: ['1,0', '1,3', '1,7', '2,0', '2,3', '2,7', '3,0', '3,3', '3,7', '4,0', '5,0'],
   };
   const GRADE_TARGETS = {
     school: { '1': 92, '2': 81, '3': 67, '4': 50 },
@@ -287,6 +293,24 @@
     return { ...goal, archived: { on: today, finalPercent, actualGrade: null } };
   }
 
+  // Echte Note nachtragen (null = keine Angabe)
+  function setActualGrade(goal, grade) {
+    if (!goal.archived) return goal;
+    if (grade !== null && !ACTUAL_GRADES[goal.scale].includes(grade)) return goal;
+    return { ...goal, archived: { ...goal.archived, actualGrade: grade } };
+  }
+
+  // Vorlage für ein neues Ziel aus einem (archivierten) Ziel – ohne Datum, Fortschritt und Archiv
+  function copyTemplate(goal) {
+    const fromGrade = goal.grade !== null ? targetForGrade(goal.scale, goal.grade) : null;
+    return {
+      name: goal.name, folder: goal.folder, topics: [...goal.topics], scale: goal.scale,
+      grade: goal.grade, bufferDays: goal.bufferDays,
+      targetPercent: goal.targetPercent !== fromGrade ? goal.targetPercent : null,
+      examDate: '',
+    };
+  }
+
   // ===== SPEICHERN (Z7) =====
   function isValidGoal(g) {
     if (!g || typeof g.id !== 'string' || !g.id) return false;
@@ -298,7 +322,7 @@
     if (g.archived !== null) {
       const a = g.archived;
       if (!a || !isDateKey(a.on) || !Number.isInteger(a.finalPercent) || a.finalPercent < 0 || a.finalPercent > 100) return false;
-      if (a.actualGrade !== null && typeof a.actualGrade !== 'string') return false;
+      if (a.actualGrade !== null && !(ACTUAL_GRADES[g.scale] || []).includes(a.actualGrade)) return false;
     }
     return true;
   }
@@ -332,13 +356,40 @@
     }
   }
 
+  // ===== SICHERUNG (Z7) =====
+  function createBackup(goals, now) {
+    return {
+      format: BACKUP_FORMAT,
+      version: SCHEMA_VERSION,
+      exportedAt: new Date(now).toISOString(),
+      goals: goals.filter(isValidGoal).map(clean),
+    };
+  }
+
+  // Prüft die Datei vollständig, bevor etwas geändert wird.
+  // → { ok: true, value: Ziel-Liste } oder { ok: false, error: 'Hinweis' }
+  function parseBackup(text) {
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { ok: false, error: 'Die Datei ist kein gültiges JSON.' };
+    }
+    if (!data || data.format !== BACKUP_FORMAT) return { ok: false, error: 'Die Datei ist keine StudyCards-Lernziele-Sicherung.' };
+    if (data.version !== SCHEMA_VERSION) return { ok: false, error: `Sicherungsversion ${data.version} wird nicht unterstützt.` };
+    if (!Array.isArray(data.goals) || !data.goals.every(isValidGoal)) return { ok: false, error: 'Die Ziele in der Sicherung sind ungültig.' };
+    if (new Set(data.goals.map(g => g.id)).size !== data.goals.length) return { ok: false, error: 'Die Sicherung enthält doppelte Ziele.' };
+    return { ok: true, value: data.goals.map(clean) };
+  }
+
   return {
-    SCHEMA_VERSION, STORAGE_KEY, NAME_MAX_LENGTH, MAX_NEW_PER_DAY, DEFAULT_BUFFER_DAYS, BUFFER_LIMITS,
+    SCHEMA_VERSION, STORAGE_KEY, BACKUP_FORMAT, ACTUAL_GRADES, NAME_MAX_LENGTH, MAX_NEW_PER_DAY, DEFAULT_BUFFER_DAYS, BUFFER_LIMITS,
     TARGET_LIMITS, MILESTONES, SCALES, GRADE_TARGETS, BONUS_XP,
     isDateKey, addDays, daysBetween, splitTag,
     cardMatches, goalCards, targetForGrade, validateGoal,
     isSecure, knowledge, lastLearnDay, daysLeft, phase, dailyPlan,
-    effectiveDue, newMilestones, markReached, markDailyDone, dailyStreak, shouldArchive, archive,
+    effectiveDue, newMilestones, markReached, markDailyDone, dailyStreak, shouldArchive, archive, setActualGrade, copyTemplate,
+    createBackup, parseBackup,
     serialize, parse,
   };
 });

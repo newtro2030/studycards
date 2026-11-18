@@ -351,6 +351,22 @@
         <div id="goal-list" class="goal-list"></div>
         <p class="goal-empty hidden" id="goal-empty">Lege ein Ziel fest – zum Beispiel eine Klassenarbeit oder Prüfung. StudyCards plant dann, wie viele Karten du jeden Tag lernen solltest.</p>
         <button type="button" class="btn btn-primary btn-lg" id="goal-new">Neues Ziel festlegen</button>
+
+        <section class="goal-archive hidden" id="goal-archive-section" aria-labelledby="goal-archive-title">
+          <h3 class="goal-section-title" id="goal-archive-title">Archiv</h3>
+          <div id="goal-archive-list" class="goal-list"></div>
+        </section>
+
+        <section class="card-panel goal-data" aria-labelledby="goal-data-title">
+          <h3 id="goal-data-title">Sicherung</h3>
+          <p class="setting-info">Lernziele werden nur lokal in diesem Browser gespeichert – auf jedem Gerät getrennt. Eine Sicherung schützt vor Datenverlust und überträgt Ziele auf ein anderes Gerät.</p>
+          <div class="pomo-data-actions">
+            <button type="button" class="btn btn-secondary btn-sm" id="goal-export">Sicherung exportieren</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="goal-import">Sicherung importieren</button>
+          </div>
+          <input type="file" id="goal-import-file" accept=".json,application/json" class="hidden">
+          <p class="setting-info goal-data-status hidden" id="goal-data-status" role="status"></p>
+        </section>
       </div>
     </div>
 
@@ -430,6 +446,7 @@
         <p class="goal-preview" id="goal-preview" aria-live="polite"></p>
 
         <button type="submit" class="btn btn-primary btn-lg" id="goal-save">Ziel speichern</button>
+        <button type="button" class="btn btn-secondary btn-full hidden" id="goal-archive">Ins Archiv verschieben</button>
         <button type="button" class="btn btn-danger btn-full hidden" id="goal-delete">Ziel löschen</button>
       </form>
     </div>

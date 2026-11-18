@@ -2811,3 +2811,92 @@ select:focus {
   .celebrate-card { animation: none; }
   .goal-banner { transition: none; }
 }
+
+/* Archiv & Sicherung (Z6/Z7) */
+.goal-archive {
+  margin-top: 28px;
+}
+
+.goal-section-title {
+  margin: 0 4px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.goal-archived {
+  padding: 0;
+}
+
+.goal-archived > summary {
+  list-style: none;
+  border-radius: var(--radius);
+}
+
+.goal-archived > summary::-webkit-details-marker {
+  display: none;
+}
+
+.goal-archived > summary:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+.goal-archived[open] > summary {
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.goal-row-meta.is-reached {
+  color: var(--success);
+}
+
+.goal-archived-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.goal-actual {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-right: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.goal-actual select {
+  min-width: 88px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  color-scheme: dark;
+}
+
+.goal-data {
+  margin-top: 28px;
+}
+
+.goal-data-status {
+  margin: 10px 0 0;
+}
+
+#goal-archive {
+  margin-top: 12px;
+  display: flex;
+}
+
+#goal-archive.hidden {
+  display: none;
+}

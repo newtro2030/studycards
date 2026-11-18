@@ -1,6 +1,6 @@
 # StudyCards — Architektur & Technologie
 
-Stand: **v1.27**
+Stand: **v1.33**
 
 ---
 
@@ -63,8 +63,9 @@ Die App selbst liegt in einem **öffentlichen** Repo (Voraussetzung für GitHub 
 studycards/                    ← Öffentliches Repo (App)
 ├── index.html                 ← HTML-Struktur (Screens, Lightbox) + CSP + SRI
 ├── style.css                  ← Dark Mode, Animationen, Mobile-First, Querformat
-├── app.js                     ← App-Logik inkl. Pomodoro-Oberfläche (~2400 Zeilen), APP_VERSION
+├── app.js                     ← App-Logik inkl. Pomodoro- und Lernziel-Oberfläche (~3300 Zeilen), APP_VERSION
 ├── pomodoro.js                ← Pomodoro-Logik ohne Oberfläche (Zustand, Zählregeln, Statistik, Sicherung)
+├── goals.js                   ← Lernziel-Logik ohne Oberfläche (Wissensstand, Tagesplan, Prüfungsmodus, Archiv, Sicherung)
 ├── sw.js                      ← Service Worker (Caching, Updates, Mitteilungs-Klick), CACHE_NAME
 ├── manifest.json              ← PWA-Manifest
 ├── icons/
@@ -77,10 +78,12 @@ studycards/                    ← Öffentliches Repo (App)
 ├── README.md
 ├── ARCHITEKTUR.md             ← Diese Datei
 ├── docs/
-│   └── PFLICHTENHEFT_POMODORO.md  ← Anforderungen, Entscheidungen, Abnahme
+│   ├── PFLICHTENHEFT_POMODORO.md  ← Anforderungen, Entscheidungen, Abnahme
+│   └── PFLICHTENHEFT_ZIELE.md     ← Lernziele: Anforderungen, Entscheidungen, Abnahme
 └── tests/
     ├── parser.test.cjs        ← Kartenparser
-    └── pomodoro.test.cjs      ← Pomodoro-Logik (feste Uhr, Zeitzone Europe/Berlin)
+    ├── pomodoro.test.cjs      ← Pomodoro-Logik (feste Uhr, Zeitzone Europe/Berlin)
+    └── goals.test.cjs         ← Lernziel-Logik (festes Datum)
 
 studium-cards/                 ← Separates, privates Repo (Kartenquelle)
 ├── 02_Wissen/
@@ -203,9 +206,14 @@ Intervall-Entwicklung (bei "Gut"):
   "nextReview": "2026-04-25",
   "lastReview": "2026-04-10",
   "totalReviews": 5,
-  "correctReviews": 4
+  "correctReviews": 4,
+  "lastQuality": 4
 }
 ```
+
+- Alle Tagesangaben (`nextReview`, `lastReview`, Tagesstatistik, Streak) sind **lokale** Kalendertage (`localDateKey`), nicht UTC – sonst wäre es in Deutschland zwischen 0 und 1/2 Uhr noch „gestern“ (seit v1.28).
+- `lastQuality` (seit v1.28) speichert die letzte Bewertung; ältere Stände ohne das Feld bleiben gültig.
+- Fälligkeit: `CardStore.isDue(id, card)` – mit Karte gilt der Prüfungsmodus der Lernziele (Abschnitt 12).
 
 ---
 
@@ -217,6 +225,7 @@ Intervall-Entwicklung (bei "Gut"):
 | **Streak-Bonus** | +1 XP pro Streak-Tag (max +10) |
 | **Level** | 100 XP pro Level |
 | **Streak** | Konsekutive Lerntage |
+| **Lernziel-Bonus** | Meilenstein 25/50/75 %: +15 · Tagesziel: +25 · Zielmarke: +100 (je einmal, siehe Abschnitt 12) |
 
 ---
 
@@ -317,7 +326,41 @@ storage-Ereignis                       → Fallback ohne BroadcastChannel
 
 ---
 
-## 12. Versionshistorie
+## 12. Lernziele
+
+Spezifikation: [docs/PFLICHTENHEFT_ZIELE.md](docs/PFLICHTENHEFT_ZIELE.md).
+
+**Aufteilung**
+
+| Teil | Datei | Aufgabe |
+|------|-------|---------|
+| Logik | `goals.js` (`window.Goals`, in Node per `require`) | Prüfen, Notenschlüssel, Kartenumfang, Wissensstand, Tagesplan mit Puffer/Nachholen, Prüfungsmodus, Meilensteine, Serie, Archiv, Speicherformat, Sicherung. Reine Funktionen mit übergebenem Datum → `tests/goals.test.cjs` |
+| Oberfläche | `app.js` (`GoalsUI`, `Celebrate`) | Zielliste, Formular, Zielkarten, Ziel-Lernrunde, Abschluss, Feiern (Banner, Konfetti, große Anzeige), Archiv, Sicherung |
+
+**Speicher** (`sc_goals`, `{ version: 1, data: [Ziel, …] }`)
+
+```json
+{
+  "id": "g…", "name": "Mathearbeit Brüche", "folder": "Mathe", "topics": ["Mathe/Brüche"],
+  "examDate": "2026-12-04", "scale": "school", "grade": "2", "targetPercent": 81, "bufferDays": 2,
+  "createdAt": "2026-11-18", "reached": [25, "target"], "dailyDone": ["2026-11-18"],
+  "archived": null | { "on": "2026-12-05", "finalPercent": 84, "actualGrade": "2" }
+}
+```
+
+**Regeln**
+
+- **Umfang:** Ordner (Teil vor dem letzten `/` des Tags) plus Themen-Tags; leere Themenliste = ganzer Ordner.
+- **Sicher:** letzte Antwort ≥ „Gut“ und Abstand ≥ 3 Tage. Wissensstand = sichere ÷ alle Karten. Angezeigt wird zusätzlich „angefangen“ (mindestens einmal gelernt).
+- **Tagesplan:** offene neue Karten ÷ Lerntage bis Prüfung − Puffertage, höchstens 60 pro Tag. In Puffertagen und am Prüfungstag werden nie gelernte Karten nachgeholt.
+- **Zusammenspiel:** `App._plannedNew()` – Karten laufender Ziele folgen dem Ziel-Tagesplan, alle übrigen dem Limit „Neue Karten pro Tag“. Dabei zählen nur Karten ohne Ziel.
+- **Prüfungsmodus:** `Goals.effectiveDue()` begrenzt den Termin beim Abfragen auf den Vortag der Prüfung, sofern die Karte dort noch nicht wiederholt wurde. Es wird nichts gespeichert.
+- **Feiern:** Nach jeder Bewertung (`GoalsUI.afterRating`) gibt es Meilensteine, Tagesziel und Zielmarke je einmal (`reached`, `dailyDone`) und dazu Bonus-XP. Konfetti zeichnet ein Canvas, bei `prefers-reduced-motion` fällt es weg.
+- **Archiv:** Am Tag nach der Prüfung archiviert die App beim Anzeigen der Startseite automatisch, aber nur mit geladenen Karten. Der Wissensstand wird festgehalten; die echte Note lässt sich nachtragen.
+- **Sicherung:** eigenes Format `studycards-goals-backup` (getrennt von Pomodoro). Beim Import wird vor jeder Änderung vollständig geprüft; unbekannte Felder werden verworfen.
+- **Beschädigte Daten** werden erkannt und nie stillschweigend überschrieben. Zurücksetzen oder ein Import ist möglich.
+
+## 13. Versionshistorie
 
 | Version | Änderungen |
 |---------|------------|
@@ -349,3 +392,9 @@ storage-Ereignis                       → Fallback ohne BroadcastChannel
 | **v1.25** | Pomodoro: Zeitprofil, Sicherung/Import, Verlauf löschen, Umgang mit beschädigten Daten |
 | **v1.26** | Kompakte, zentrierte Spalte auf großen Bildschirmen |
 | **v1.27** | Pomodoro: mehrere Tabs – ein steuernder Tab, gesperrte Änderungen, Abgleich per BroadcastChannel |
+| **v1.28** | Lokales Datum statt UTC; Lernziel-Logik (`goals.js`) mit Tests |
+| **v1.29** | Lernziele anlegen, bearbeiten, löschen |
+| **v1.30** | Zielkarten auf der Startseite, Lernrunde pro Ziel, Nachholen in Puffertagen |
+| **v1.31** | Ziel-Tagesplan getrennt vom allgemeinen Limit, Prüfungsmodus |
+| **v1.32** | Meilensteine, Tagesziel mit Serie, Konfetti, Bonus-XP |
+| **v1.33** | Archiv mit echter Note, „Als neues Ziel“, Sicherung der Lernziele |

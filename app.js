@@ -72,7 +72,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.32'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.33'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -1591,7 +1591,10 @@
       this._load();
       const $ = (id) => document.getElementById(id);
 
-      $('goal-tile').addEventListener('click', () => App.showScreen('goals'));
+      $('goal-tile').addEventListener('click', () => {
+        $('goal-data-status').classList.add('hidden');
+        App.showScreen('goals');
+      });
       $('btn-back-goals').addEventListener('click', () => App.showScreen('dashboard'));
       $('goal-new').addEventListener('click', () => this.edit(null));
       $('btn-back-goal-edit').addEventListener('click', () => App.showScreen('goals'));
@@ -1608,6 +1611,9 @@
         this._onSave();
       });
       $('goal-delete').addEventListener('click', () => this._onDelete());
+      $('goal-archive').addEventListener('click', () => this._onArchive());
+      this._bindArchive();
+      this._bindBackup();
       // Hinweis eines Feldes verschwindet, sobald es geändert wird
       const clearFieldError = (e) => {
         e.target.removeAttribute('aria-invalid');
@@ -1702,14 +1708,17 @@
     },
 
     // ----- Formular -----
-    edit(id) {
+    // id: bestehendes Ziel bearbeiten · template: neues Ziel aus Vorlage (Archiv → "Als neues Ziel")
+    edit(id, template = null) {
       const G = window.Goals;
-      const goal = id ? this.goals.find(g => g.id === id) : null;
-      this.editingId = goal ? goal.id : null;
+      const existing = id ? this.goals.find(g => g.id === id) : null;
+      this.editingId = existing ? existing.id : null;
+      const goal = existing || template; // Werte zum Vorbelegen
       const $ = (x) => document.getElementById(x);
 
-      $('goal-edit-title').textContent = goal ? 'Ziel bearbeiten' : 'Neues Ziel';
-      $('goal-delete').classList.toggle('hidden', !goal);
+      $('goal-edit-title').textContent = existing ? 'Ziel bearbeiten' : 'Neues Ziel';
+      $('goal-delete').classList.toggle('hidden', !existing);
+      $('goal-archive').classList.toggle('hidden', !existing);
       this._clearErrors();
 
       // Fachauswahl
@@ -1742,12 +1751,12 @@
       $('goal-buffer').value = goal ? goal.bufferDays : G.DEFAULT_BUFFER_DAYS;
       // Zielmarke nur anzeigen, wenn sie von der Note abweicht (= eigene Eingabe)
       const fromGrade = goal && goal.grade !== null ? G.targetForGrade(goal.scale, goal.grade) : null;
-      $('goal-target').value = goal && goal.targetPercent !== fromGrade ? goal.targetPercent : '';
+      $('goal-target').value = goal && goal.targetPercent !== null && goal.targetPercent !== fromGrade ? goal.targetPercent : '';
 
       this._renderTargetInfo();
       this._renderPreview();
       App.showScreen('goal-edit');
-      if (!goal) $('goal-name').focus({ preventScroll: true });
+      if (!existing) $(template ? 'goal-date' : 'goal-name').focus({ preventScroll: true });
     },
 
     _selectedFolder() {
@@ -1948,6 +1957,137 @@
       App.showScreen('goals');
     },
 
+    // ----- Archiv (Z6) -----
+    _onArchive() {
+      const goal = this.goals.find(g => g.id === this.editingId);
+      if (!goal || !confirm(`Ziel „${goal.name}“ jetzt ins Archiv verschieben? Der aktuelle Wissensstand wird festgehalten.`)) return;
+      const k = window.Goals.knowledge(goal, App.allCards, CardStore.states);
+      this.goals = this.goals.map(g => (g.id === goal.id ? window.Goals.archive(g, { today: today(), finalPercent: k.percent }) : g));
+      if (!this._save()) return;
+      App.showToast('Ziel archiviert');
+      App.showScreen('goals');
+    },
+
+    // Am Tag nach der Prüfung automatisch archivieren – nur mit geladenen Karten,
+    // damit der festgehaltene Wissensstand stimmt
+    autoArchive() {
+      const G = window.Goals;
+      if (this.corrupt || App.allCards.length === 0) return;
+      const t = today();
+      const moved = [];
+      this.goals = this.goals.map(g => {
+        if (!G.shouldArchive(g, t)) return g;
+        moved.push(g.name);
+        return G.archive(g, { today: t, finalPercent: G.knowledge(g, App.allCards, CardStore.states).percent });
+      });
+      if (!moved.length || !this._save()) return;
+      App.showToast(moved.length === 1 ? `„${moved[0]}“ ist ins Archiv gewandert` : `${moved.length} Ziele sind ins Archiv gewandert`);
+    },
+
+    _bindArchive() {
+      const list = document.getElementById('goal-archive-list');
+      list.addEventListener('change', (e) => {
+        const id = e.target.dataset.gradeFor;
+        if (!id) return;
+        this.goals = this.goals.map(g => (g.id === id ? window.Goals.setActualGrade(g, e.target.value || null) : g));
+        if (this._save()) {
+          App.showToast(e.target.value ? 'Note eingetragen' : 'Note entfernt');
+          this.renderList(id);
+        }
+      });
+      list.addEventListener('click', (e) => {
+        const copy = e.target.closest('[data-copy]');
+        const del = e.target.closest('[data-delete]');
+        if (copy) {
+          const goal = this.goals.find(g => g.id === copy.dataset.copy);
+          if (goal) this.edit(null, window.Goals.copyTemplate(goal));
+        } else if (del) {
+          const goal = this.goals.find(g => g.id === del.dataset.delete);
+          if (!goal || !confirm(`Archiviertes Ziel „${goal.name}“ löschen? Karten und Lernfortschritt bleiben erhalten.`)) return;
+          this.goals = this.goals.filter(g => g.id !== goal.id);
+          if (this._save()) {
+            App.showToast('Ziel gelöscht');
+            this.renderList();
+          }
+        }
+      });
+    },
+
+    _renderArchive(openId) {
+      const G = window.Goals;
+      const list = this.corrupt ? [] : this.goals.filter(g => g.archived)
+        .sort((a, b) => b.examDate.localeCompare(a.examDate) || a.name.localeCompare(b.name, 'de'));
+      document.getElementById('goal-archive-section').classList.toggle('hidden', list.length === 0);
+      document.getElementById('goal-archive-list').innerHTML = list.map(goal => {
+        const a = goal.archived;
+        const reached = a.finalPercent >= goal.targetPercent;
+        const wish = goal.grade !== null ? ` · Wunschnote ${escapeHTML(goal.grade)}` : '';
+        const options = ['<option value="">–</option>'].concat(G.ACTUAL_GRADES[goal.scale].map(gr =>
+          `<option value="${escapeHTML(gr)}"${a.actualGrade === gr ? ' selected' : ''}>${escapeHTML(gr)}</option>`)).join('');
+        const gradeId = 'goal-actual-' + escapeHTML(goal.id);
+        return `<details class="card-panel goal-archived"${goal.id === openId ? ' open' : ''}>
+          <summary class="goal-row">
+            <span class="goal-row-text">
+              <span class="goal-row-name">${escapeHTML(goal.name)}</span>
+              <span class="goal-row-meta">${escapeHTML(this._scopeLabel(goal))} · ${escapeHTML(this._formatDate(goal.examDate))}</span>
+              <span class="goal-row-meta ${reached ? 'is-reached' : ''}">${reached ? '✓ ' : ''}${a.finalPercent} % sicher · Ziel ${goal.targetPercent} %${wish}</span>
+            </span>
+            <span class="goal-row-badge">${a.actualGrade ? `<strong>${escapeHTML(a.actualGrade)}</strong>Note` : '<strong>–</strong>Note'}</span>
+          </summary>
+          <div class="goal-archived-actions">
+            <label class="goal-actual" for="${gradeId}">Echte Note
+              <select id="${gradeId}" data-grade-for="${escapeHTML(goal.id)}">${options}</select>
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm" data-copy="${escapeHTML(goal.id)}">Als neues Ziel</button>
+            <button type="button" class="btn btn-danger btn-sm" data-delete="${escapeHTML(goal.id)}">Löschen</button>
+          </div>
+        </details>`;
+      }).join('');
+    },
+
+    // ----- Sicherung (Z7) -----
+    _bindBackup() {
+      const $ = (id) => document.getElementById(id);
+      const G = window.Goals;
+      const status = (text) => {
+        $('goal-data-status').textContent = text;
+        $('goal-data-status').classList.remove('hidden');
+      };
+      const count = (n, dative = false) => (n === 1 ? '1 Ziel' : `${n} ${dative ? 'Zielen' : 'Ziele'}`);
+
+      $('goal-export').addEventListener('click', () => {
+        if (this.corrupt) return status('Die gespeicherten Ziele sind beschädigt und können nicht gesichert werden.');
+        const backup = G.createBackup(this.goals, Date.now());
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement('a'), { href: url, download: `studycards-lernziele-${today()}.json` });
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        status(`Sicherung mit ${count(backup.goals.length, true)} erstellt.`);
+      });
+
+      $('goal-import').addEventListener('click', () => {
+        $('goal-import-file').value = '';
+        $('goal-import-file').click();
+      });
+      $('goal-import-file').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        let text = '';
+        try { text = await file.text(); } catch { return status('Die Datei konnte nicht gelesen werden.'); }
+        const res = G.parseBackup(text);
+        if (!res.ok) return status(`Import abgebrochen: ${res.error} Deine Ziele sind unverändert.`);
+        if (!confirm(`Sicherung importieren?\n\nAlle Lernziele auf diesem Gerät werden durch die Sicherung ersetzt (${count(res.value.length)}). Karten und Lernfortschritt bleiben unverändert.`)) return;
+        this.corrupt = false; // ersetzt auch beschädigte Daten
+        this.goals = res.value;
+        if (!this._save()) return;
+        this.renderList();
+        status(`Sicherung importiert (${count(res.value.length)}).`);
+      });
+    },
+
     // ----- Anzeige -----
     _formatDate(key) {
       const [y, m, d] = key.split('-').map(Number);
@@ -1968,8 +2108,9 @@
       return '<strong>✓</strong>vorbei';
     },
 
-    renderList() {
+    renderList(openArchivedId) {
       const G = window.Goals;
+      this._renderArchive(openArchivedId);
       document.getElementById('goal-corrupt').classList.toggle('hidden', !this.corrupt);
       document.getElementById('goal-new').disabled = this.corrupt;
       const list = this.active().sort((a, b) => a.examDate.localeCompare(b.examDate) || a.name.localeCompare(b.name, 'de'));
@@ -2124,6 +2265,8 @@
     },
 
     renderCards() {
+      this.autoArchive();
+      this.renderTile();
       const container = document.getElementById('goal-cards');
       const list = this.corrupt ? [] : this.active().sort((a, b) => a.examDate.localeCompare(b.examDate) || a.name.localeCompare(b.name, 'de'));
       container.innerHTML = list.map(goal => {

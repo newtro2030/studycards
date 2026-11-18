@@ -2,7 +2,7 @@
 
 Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Spaced Repetition.
 
-![Version](https://img.shields.io/badge/version-1.27-7c3aed)
+![Version](https://img.shields.io/badge/version-1.33-7c3aed)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Desktop-brightgreen)
 
@@ -18,6 +18,7 @@ Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Sp
 - **Automatische Updates** — Still im Hintergrund, nie mitten in einer Lernsitzung; manuell über „Nach Updates suchen“
 - **LaTeX-Support** — Mathematische Formeln via KaTeX
 - **Pomodoro-Timer** — Lern- und Pausenphasen mit Zyklus, Signalton, optionalen Mitteilungen, Statistik und Sicherung; funktioniert auch ohne geladene Karten
+- **Lernziele** — Prüfung oder Klassenarbeit mit Datum und Wunschnote festlegen; Tagesplan, Countdown, Fortschrittsbalken, Konfetti
 - **Gamification** — XP, Levels, Streaks für Lernmotivation
 - **Dark Mode** — Mobile-first Design, optimiert für iPhone (Hoch- und Querformat)
 
@@ -117,6 +118,20 @@ Siehe [ARCHITEKTUR.md](ARCHITEKTUR.md) für eine detaillierte technische Dokumen
 - Daten bleiben lokal im Browser; Sicherung als JSON exportieren und wieder importieren
 
 Details und Abnahmekriterien: [Pflichtenheft](docs/PFLICHTENHEFT_POMODORO.md).
+
+## Lernziele
+
+Über die Kachel **Lernziele** auf der Startseite legst du ein Ziel fest – für eine Prüfung im Studium oder eine Klassenarbeit in der Schule:
+
+- **Fach und Themen** aus den Tags (`#Mathe/Brüche`, `#Semester-5/Projektmanagement`), **Prüfungsdatum**, **Wunschnote** (Schule 1–4, Studium 1,0–4,0) und **Puffertage** (Standard 2)
+- Die Wunschnote wird zur Zielmarke: so viel Prozent der Karten solltest du **sicher** können (Note 1 ≙ 92 %, 2 ≙ 81 %, 3 ≙ 67 %, 4 ≙ 50 %)
+- **Zielkarte** oben auf der Startseite: Countdown, Fortschrittsbalken mit Zielmarke, Tagesaufgabe („Heute: 10 neue Karten · 5 Wiederholungen“), Serie 🔥 – antippen startet die Runde
+- **Tagesplan:** Neue Karten werden gleichmäßig bis vor die Puffertage verteilt; in den Puffertagen wird nur noch wiederholt. Am Tag vor der Prüfung kommt jede Karte noch einmal dran.
+- **Feiern:** Hinweise bei 25/50/75 %, Bonus-XP fürs Tagesziel, Konfetti beim Erreichen der Wunschnote
+- **Archiv:** Nach der Prüfung wandert das Ziel ins Archiv – mit erreichtem Wissensstand und, wenn du magst, der echten Note
+- Ziele bleiben lokal auf dem Gerät; Sicherung und Import im Lernziele-Bildschirm
+
+Details: [Pflichtenheft Lernziele](docs/PFLICHTENHEFT_ZIELE.md).
 
 ## Tests
 

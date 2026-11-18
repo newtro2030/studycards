@@ -262,6 +262,23 @@ test('Am Tag nach der Prüfung wird archiviert', () => {
   assert.equal(G.archive(a, { today: '2026-12-09', finalPercent: 1 }), a);
 });
 
+test('Echte Note nachtragen: nur im Archiv und nur gültige Noten', () => {
+  const g = goal();
+  assert.equal(G.setActualGrade(g, '2'), g); // nicht archiviert
+  const a = G.archive(g, { today: '2026-12-05', finalPercent: 84 });
+  assert.equal(G.setActualGrade(a, '2').archived.actualGrade, '2');
+  assert.equal(G.setActualGrade(a, '6').archived.actualGrade, '6');
+  assert.equal(G.setActualGrade(a, '2,3'), a); // Studiennote bei Schulziel
+  assert.equal(G.setActualGrade(G.setActualGrade(a, '2'), null).archived.actualGrade, null);
+});
+
+test('Als neues Ziel kopieren: ohne Datum, Fortschritt und Archiv', () => {
+  const a = G.archive(G.markReached(goal({ topics: ['Mathe/Brüche'] }), [25]), { today: '2026-12-05', finalPercent: 84 });
+  const t = G.copyTemplate(a);
+  assert.deepEqual(t, { name: 'Mathearbeit Brüche', folder: 'Mathe', topics: ['Mathe/Brüche'], scale: 'school', grade: '2', bufferDays: 2, targetPercent: null, examDate: '' });
+  assert.equal(G.copyTemplate({ ...a, targetPercent: 70 }).targetPercent, 70);
+});
+
 // ----- Z7 Speichern -----
 
 test('Speichern und Laden, unbekannte Felder entfallen', () => {
@@ -286,4 +303,27 @@ test('Fehlende Daten → leere Liste; kaputte Daten werden erkannt', () => {
   assert.deepEqual(G.parse(JSON.stringify({ version: 99, data: [] })), { ok: false, corrupt: true });
   assert.deepEqual(G.parse(G.serialize([{ ...goal(), id: '' }])), { ok: false, corrupt: true });
   assert.deepEqual(G.parse(G.serialize([{ ...goal(), reached: [33] }])), { ok: false, corrupt: true });
+});
+
+// ----- Z7 Sicherung -----
+
+test('Sicherung: Rundlauf mit aktiven und archivierten Zielen', () => {
+  const a = G.setActualGrade(G.archive({ ...goal(), id: 'g2', examDate: '2026-11-20' }, { today: '2026-11-21', finalPercent: 90 }), '1');
+  const backup = G.createBackup([goal(), a], Date.UTC(2026, 10, 18));
+  assert.equal(backup.format, 'studycards-goals-backup');
+  const res = G.parseBackup(JSON.stringify(backup));
+  assert.equal(res.ok, true);
+  assert.equal(res.value.length, 2);
+  assert.equal(res.value[1].archived.actualGrade, '1');
+});
+
+test('Sicherung: fremde oder kaputte Dateien werden abgelehnt', () => {
+  assert.equal(G.parseBackup('{kaputt').ok, false);
+  assert.match(G.parseBackup(JSON.stringify({ format: 'studycards-pomodoro-backup', version: 1 })).error, /keine StudyCards-Lernziele/);
+  const b = G.createBackup([goal()], 0);
+  assert.equal(G.parseBackup(JSON.stringify({ ...b, version: 2 })).ok, false);
+  assert.match(G.parseBackup(JSON.stringify({ ...b, goals: [goal(), goal()] })).error, /doppelte/);
+  assert.equal(G.parseBackup(JSON.stringify({ ...b, goals: [{ ...goal(), targetPercent: 500 }] })).ok, false);
+  const extra = G.parseBackup(JSON.stringify({ ...b, goals: [{ ...goal(), hack: 1 }] }));
+  assert.equal(extra.value[0].hack, undefined);
 });
