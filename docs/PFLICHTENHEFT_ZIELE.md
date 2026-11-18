@@ -6,7 +6,7 @@ Version 1.0 · 18. November 2026 · Status: **freigegeben** (Umsetzung in Schrit
 
 Ein Lernziel verbindet einen Kartenumfang mit einem Termin, zum Beispiel „Mathe – Brüche, Klassenarbeit am 4. Dezember, Wunschnote 2“. Die App berechnet daraus den täglichen Lernplan und zeigt gut sichtbar Countdown und Fortschritt. Wenn das Ziel erreicht ist, gibt es Konfetti.
 
-Zielgruppen sind sowohl das Studium (Prüfungen pro Semester) als auch die Schule (Klara, 6. Klasse und später, Klassenarbeiten und Vokabeltests).
+Zielgruppen sind sowohl das Studium (Prüfungen pro Semester) als auch die Schule (6. Klasse und später, Klassenarbeiten und Vokabeltests).
 
 ## 2. Begriffe und Kartenumfang
 
@@ -20,7 +20,7 @@ Die vorhandene Tag-Struktur wird unverändert genutzt:
 
 - Ein Ziel umfasst **einen Ordner** und darin **ein oder mehrere Themen**, standardmäßig alle.
 - Der Parser bleibt unverändert, und die Karten-IDs bleiben gleich. Der Lernfortschritt geht also nicht verloren.
-- `klara-cards` ist auf `#Fach/Thema` umgestellt: `#Englisch/Blue-Line-1`, `#MNT/Wirbeltiere`, `#Mathe/Beispiele`. Die Vokabelliste enthält keine Unit-Grenzen; neue Units bekommen eigene Abschnitte, zum Beispiel `## Lernkarten #Englisch/Blue-Line-2-Unit-1`.
+- `schule-cards` ist auf `#Fach/Thema` umgestellt: `#Englisch/Blue-Line-1`, `#MNT/Wirbeltiere`, `#Mathe/Beispiele`. Die Vokabelliste enthält keine Unit-Grenzen; neue Units bekommen eigene Abschnitte, zum Beispiel `## Lernkarten #Englisch/Blue-Line-2-Unit-1`.
 
 ## 3. Funktionen
 
@@ -105,7 +105,7 @@ Nach jedem Schritt folgen ein Bericht und die Prüfung (Tests, Vorschau auf 375 
 1. Die Zuordnung von Note zu % (Z3) ist freigegeben.
 2. Standardmäßig gibt es 2 Puffertage, pro Ziel änderbar. Freigegeben.
 3. Die Obergrenze von 60 neuen Karten pro Tag und Ziel ist freigegeben.
-4. Die `klara-cards`-Tags sind auf `#Fach/Thema` umgestellt.
+4. Die `schule-cards`-Tags sind auf `#Fach/Thema` umgestellt.
 5. Der Tagesplan ersetzt für die Karten eines Ziels die Einstellung „Neue Karten pro Tag“. Das ist eine Entscheidung des Entwicklers, vom Auftraggeber übertragen.
 6. Mehrere Ziele können gleichzeitig aktiv sein, für Studium und Schule.
 
