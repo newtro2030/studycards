@@ -18,8 +18,14 @@
   const DEFAULT_NEW_PER_DAY = 20;
 
   // ===== HELPERS =====
+  // Lokales Kalenderdatum 'YYYY-MM-DD' (nicht UTC – sonst ist es in Deutschland
+  // zwischen 0 und 1/2 Uhr noch "gestern")
+  function localDateKey(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
   function today() {
-    return new Date().toISOString().split('T')[0];
+    return localDateKey(new Date());
   }
 
   function daysBetween(a, b) {
@@ -66,7 +72,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.27'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.28'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -287,6 +293,7 @@
       const s = { ...state };
       s.totalReviews++;
       s.lastReview = today();
+      s.lastQuality = quality; // für den Wissensstand der Lernziele
 
       if (quality >= 3) {
         // Correct
@@ -324,7 +331,7 @@
       // Set next review date
       const next = new Date();
       next.setDate(next.getDate() + s.interval);
-      s.nextReview = next.toISOString().split('T')[0];
+      s.nextReview = localDateKey(next);
 
       return s;
     },
@@ -461,7 +468,7 @@
       const t = today();
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const yesterdayStr = localDateKey(yesterday);
 
       if (d.lastStudyDate === t) {
         // Already studied today, no change
@@ -484,7 +491,7 @@
       for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        const key = d.toISOString().split('T')[0];
+        const key = localDateKey(d);
         const dayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
         days.push({
           date: key,
