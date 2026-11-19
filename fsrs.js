@@ -217,10 +217,13 @@
     return { 1: p[1].interval, 3: p[3].interval, 4: p[4].interval, 5: p[5].interval };
   }
 
-  // Abrufwahrscheinlichkeit einer gelernten Karte an einem Tag (F4); null ohne FSRS-Werte
+  // Abrufwahrscheinlichkeit einer gelernten Karte an einem Tag (F4); null für neue Karten.
+  // Alte SM-2-Zustände werden wie in F2 geschätzt (S = Abstand, mindestens 1).
   function retrievability(state, today, w = DEFAULT_PARAMS) {
-    if (!state || !(state.stability > 0) || !state.lastReview) return null;
-    return forgettingCurve(Math.max(0, daysBetween(state.lastReview, today)), state.stability, w);
+    if (!state || !state.lastReview) return null;
+    const memory = memoryOf(state);
+    if (!memory) return null;
+    return forgettingCurve(Math.max(0, daysBetween(state.lastReview, today)), memory.stability, w);
   }
 
   // ===== BEWERTUNGSPROTOKOLL (F5) =====

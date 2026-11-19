@@ -143,3 +143,10 @@ Nach jedem Schritt: Bericht mit Testergebnis und Freigabe, Push nur nach ausdrü
   - Mit `algorithm: 'sm2'` zeigt die Vorschau 1 · 1 · 1 · 1 wie bisher. Zurück auf FSRS ohne Verlust.
   - Alter SM-2-Zustand (Abstand 6) ergibt mit FSRS 1 · 8 · 9 · 12 Tage.
   - Lernziele und Tagesplan laufen weiter, die Konsole zeigt keine Fehler. 98/98 Tests grün.
+
+**Schritt 3 – Einstellungen, Anzeige, Doku (19.11.2026): fertig, v1.35**
+- Einstellungen → **Lernverfahren**: Auswahl FSRS (empfohlen) / SM-2 (klassisch) mit der Erklärung aus F3, die beim Wechsel mitwechselt, und kurzem Hinweis. **Behaltensrate** 80–95 % ist nur bei FSRS sichtbar. Alles wird sofort gespeichert.
+- Statistik → Gesamtfortschritt: „Du weißt heute voraussichtlich … % deiner … gelernten Karten.“ Gezählt werden die gelernten Karten, die gerade geladen sind. Alte SM-2-Stände werden geschätzt (S = Abstand).
+- README (Feature, Lizenzhinweis ts-fsrs), ARCHITEKTUR (Abschnitt 7 neu, Dateibaum, Versionen).
+- Prüfung im Browser bei 375 px: Wechsel auf SM-2 (Erklärung wechselt, Behaltensrate verschwindet, Hinweis „SM-2 ist aktiv“). Zurück auf FSRS, 85 % gewählt, nach dem Neuladen erhalten. Die Statistikzeile wird angezeigt. 98/98 Tests grün.
+- **Hinweis:** „Gelernt“ in der Statistik zählt alle gespeicherten Lernstände, auch von Karten, die umbenannt oder gelöscht wurden. Die neue Zeile zählt nur vorhandene Karten. Das war schon vor FSRS so.

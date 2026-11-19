@@ -200,7 +200,10 @@ test('Abrufwahrscheinlichkeit einer Karte an einem Tag', () => {
   near(F.retrievability(s, '2026-11-01'), 1);
   assert.ok(Math.abs(F.retrievability(s, '2026-11-03') - 0.9) < 0.02);
   assert.equal(F.retrievability(undefined, TODAY), null);
-  assert.equal(F.retrievability({ interval: 6, lastReview: '2026-11-01' }, TODAY), null); // alter SM-2-Zustand
+  // alter SM-2-Zustand: geschätzt mit S = Abstand
+  const legacy = { interval: 6, lastReview: '2026-11-13', totalReviews: 2 };
+  near(F.retrievability(legacy, TODAY), F.forgettingCurve(6, 6));
+  assert.equal(F.retrievability({ lastReview: '2026-11-13', totalReviews: 0 }, TODAY), null);
 });
 
 // ----- Datum -----

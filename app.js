@@ -18,6 +18,12 @@
   const XP_PER_LEVEL = 100;
   const DEFAULT_NEW_PER_DAY = 20;
 
+  // Erklärungen in den Einstellungen (FSRS F3)
+  const SCHEDULER_TEXT = {
+    fsrs: 'Die App merkt sich für jede Karte, wie gut du sie kannst. Sie fragt dich genau dann wieder, wenn du sie sonst bald vergessen würdest. Leichte Karten kommen seltener, schwere öfter. So brauchst du etwa ein Fünftel weniger Zeit für dasselbe Wissen.',
+    sm2: 'Das alte Verfahren aus Anki. Nach jeder richtigen Antwort wird der Abstand nach einer festen Regel ungefähr 2,5-mal so lang. Einfach und bewährt, aber du wiederholst leichte Karten öfter als nötig.',
+  };
+
   // ===== HELPERS =====
   // Lokales Kalenderdatum 'YYYY-MM-DD' (nicht UTC – sonst ist es in Deutschland
   // zwischen 0 und 1/2 Uhr noch "gestern")
@@ -73,7 +79,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.34'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.35'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -539,6 +545,18 @@
       return total > 0 ? Math.round((correct / total) * 100) : 0;
     },
 
+    // Ø Abrufwahrscheinlichkeit heute (FSRS F4) über die gelernten Karten der Liste, 0–100 oder null
+    getAverageRetrievability(cards) {
+      const t = today();
+      const values = [];
+      for (const c of cards) {
+        const r = window.FSRS.retrievability(this.states[c.id], t);
+        if (r !== null) values.push(r);
+      }
+      if (values.length === 0) return null;
+      return { percent: Math.round(values.reduce((a, r) => a + r, 0) / values.length * 100), count: values.length };
+    },
+
     reset() {
       this._states = {};
       this.save();
@@ -750,6 +768,38 @@
           save(STORAGE_KEYS.config, this.config);
         }
       });
+
+      // Lernverfahren (FSRS F3)
+      document.querySelectorAll('input[name="sched-algorithm"]').forEach(input => {
+        input.addEventListener('change', (e) => {
+          if (!this.config || !e.target.checked) return;
+          this.config.algorithm = e.target.value;
+          save(STORAGE_KEYS.config, this.config);
+          this._renderScheduler();
+          this.showToast(e.target.value === 'fsrs' ? 'FSRS ist aktiv' : 'SM-2 ist aktiv');
+        });
+      });
+      document.getElementById('settings-retention').addEventListener('change', (e) => {
+        if (!this.config) return;
+        const value = parseFloat(e.target.value);
+        if (!window.FSRS.RETENTION_OPTIONS.includes(value)) return;
+        this.config.retention = value;
+        save(STORAGE_KEYS.config, this.config);
+      });
+    },
+
+    // Einstellungen „Lernverfahren“: Auswahl, Erklärung in einfacher Sprache, Behaltensrate
+    _renderScheduler() {
+      const algorithm = this.config?.algorithm || window.FSRS.DEFAULT_ALGORITHM;
+      const retention = this.config?.retention || window.FSRS.DEFAULT_RETENTION;
+      document.querySelectorAll('input[name="sched-algorithm"]').forEach(input => {
+        input.checked = input.value === algorithm;
+      });
+      document.getElementById('sched-explain').textContent = SCHEDULER_TEXT[algorithm];
+      document.getElementById('settings-retention').value = String(retention);
+      const isFsrs = algorithm === 'fsrs';
+      document.getElementById('sched-retention-row').classList.toggle('hidden', !isFsrs);
+      document.getElementById('sched-retention-info').classList.toggle('hidden', !isFsrs);
     },
 
     // ----- Setup -----
@@ -1412,6 +1462,12 @@
       document.getElementById('stats-learned').textContent = CardStore.getLearnedCount();
       document.getElementById('stats-mature').textContent = CardStore.getMatureCount();
       document.getElementById('stats-accuracy').textContent = CardStore.getAccuracy() + '%';
+      const recall = CardStore.getAverageRetrievability(this.allCards);
+      const recallEl = document.getElementById('stats-retention');
+      recallEl.classList.toggle('hidden', !recall);
+      if (recall) {
+        recallEl.textContent = `Du weißt heute voraussichtlich ${recall.percent} % deiner ${recall.count === 1 ? 'gelernten Karte' : recall.count + ' gelernten Karten'}.`;
+      }
       document.getElementById('stats-best-streak').textContent = Stats.data.bestStreak;
       document.getElementById('stats-total-xp').textContent = Stats.data.xp;
       document.getElementById('stats-total-reviews').textContent = Stats.data.totalReviews;
@@ -1539,6 +1595,7 @@
       document.getElementById('settings-card-count').textContent = Object.keys(CardStore.states).length;
       document.getElementById('settings-new-per-day').value = this.config.newPerDay || DEFAULT_NEW_PER_DAY;
       document.getElementById('settings-show-xp').checked = this.config.showXP !== false;
+      this._renderScheduler();
     },
 
     // ----- Toast -----

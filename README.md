@@ -2,13 +2,13 @@
 
 Eine Progressive Web App zum Lernen von Karteikarten aus Obsidian-Notizen mit Spaced Repetition.
 
-![Version](https://img.shields.io/badge/version-1.34-7c3aed)
+![Version](https://img.shields.io/badge/version-1.35-7c3aed)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20Desktop-brightgreen)
 
 ## Features
 
-- **Spaced Repetition (SM-2)** — Optimierte Wiederholungs-Intervalle für langfristiges Behalten
+- **Spaced Repetition mit FSRS** — Moderner Planer (FSRS-6): leichte Karten kommen seltener, schwere öfter – etwa 20 % weniger Wiederholungen als SM-2. SM-2 bleibt in den Einstellungen wählbar.
 - **Obsidian-Integration** — Liest `Q:/A:`-Karteikarten direkt aus Markdown-Dateien
 - **Ordner & Fächer** — Karten per Tag gruppieren (`## Lernkarten #Semester-4/Rechnernetze`)
 - **Bilder & Screenshots** — Obsidian-Embeds `![[bild.png]]` in Frage und Antwort, Vollbild mit Pinch-Zoom
@@ -171,3 +171,5 @@ npx http-server -p 8080
 ## Lizenz
 
 MIT
+
+Die FSRS-6-Formeln und Standardparameter stammen aus [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs) (Open Spaced Repetition, MIT-Lizenz) und sind in `fsrs.js` eigenständig nachprogrammiert.

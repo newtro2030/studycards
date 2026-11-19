@@ -1,6 +1,6 @@
 # StudyCards — Architektur & Technologie
 
-Stand: **v1.34**
+Stand: **v1.35**
 
 ---
 
@@ -34,7 +34,7 @@ Die App selbst liegt in einem **öffentlichen** Repo (Voraussetzung für GitHub 
 | **Karten parsen** | `## Lernkarten`-Abschnitt → `Q:`/`A:`-Paare | JS-Parser |
 | **Ordner & Fächer** | Verschachtelte Tags `#Ordner/Fach` auswerten | Regex-Parser |
 | **Bilder anzeigen** | `![[bild.png]]` über den Repo-Index auflösen, als Blob laden | Fetch + Object-URLs + Cache API |
-| **Lernen** | SM-2 berechnet Wiederholungs-Intervalle | JavaScript (Client-side) |
+| **Lernen** | FSRS-6 (Standard) oder SM-2 berechnet die Wiederholungs-Termine | `fsrs.js` (Client-side) |
 | **Fortschritt speichern** | XP, Streak, Kartenstände lokal | `localStorage` |
 | **Offline-Cache** | App-Shell, CDN-Ressourcen und Bilder | Service Worker + Cache API |
 | **Updates** | Automatischer Hinweis oder manuell „Nach Updates suchen“ | Service Worker Lifecycle |
@@ -66,6 +66,7 @@ studycards/                    ← Öffentliches Repo (App)
 ├── app.js                     ← App-Logik inkl. Pomodoro- und Lernziel-Oberfläche (~3300 Zeilen), APP_VERSION
 ├── pomodoro.js                ← Pomodoro-Logik ohne Oberfläche (Zustand, Zählregeln, Statistik, Sicherung)
 ├── goals.js                   ← Lernziel-Logik ohne Oberfläche (Wissensstand, Tagesplan, Prüfungsmodus, Archiv, Sicherung)
+├── fsrs.js                    ← Wiederholungsplanung ohne Oberfläche (FSRS-6, SM-2, Abrufwahrscheinlichkeit, Protokoll)
 ├── sw.js                      ← Service Worker (Caching, Updates, Mitteilungs-Klick), CACHE_NAME
 ├── manifest.json              ← PWA-Manifest
 ├── icons/
@@ -182,37 +183,49 @@ Karte anzeigen
 
 ---
 
-## 7. SM-2 Spaced Repetition
+## 7. Wiederholungsplanung (FSRS-6 und SM-2)
+
+Seit v1.34 plant **FSRS-6** die Wiederholungen (Standard), SM-2 ist in den Einstellungen wählbar. Die Rechenlogik steckt in `fsrs.js` (UMD, `window.FSRS`, Tests in `tests/fsrs.test.cjs`); `app.js` ruft sie über `Scheduler` auf. Details und Entscheidungen: `docs/PFLICHTENHEFT_FSRS.md`.
 
 ```
-Bewertung:  Nochmal(1)  Schwer(3)  Gut(4)  Leicht(5)
-                │           │         │         │
-                ▼           ▼         ▼         ▼
-            Reset auf    Intervall  Intervall  Intervall
-            1 Tag        ×0.85      ×EF       ×EF×1.3
+Bewertung:   Nochmal   Schwer   Gut   Leicht
+FSRS-Note:      1         2      3      4
 
-Ease Factor: startet 2.5, Minimum 1.3
+FSRS: pro Karte Stabilität S (Tage bis 90 % Abrufwahrscheinlichkeit) und
+      Schwierigkeit D (1–10). Nächster Termin = Tag, an dem die Abruf-
+      wahrscheinlichkeit auf die Behaltensrate fällt (Standard 90 %).
+      Schwer ≤ Gut < Leicht, höchstens 365 Tage.
+SM-2: Abstand × Ease Factor (Start 2,5, Minimum 1,3), wie bis v1.33.
 
-Intervall-Entwicklung (bei "Gut"):
-  1d → 6d → 15d → 38d → 94d → ...
+Abstände bei „immer Gut“, jeweils pünktlich wiederholt:
+  FSRS: 2d → 11d → 46d → 163d → 365d
+  SM-2: 1d → 6d → 15d → 38d → 95d
 ```
+
+- **Beide Verfahren rechnen immer mit.** Die Einstellung `config.algorithm` (`'fsrs'` | `'sm2'`) bestimmt nur, wer den nächsten Termin festlegt. Ein Wechsel ist verlustfrei.
+- `config.retention`: 0,8 / 0,85 / 0,9 / 0,95 (nur FSRS). Unbekannte Werte → Standard.
+- Gleicher Tag („Nochmal“ in der Runde): FSRS-Kurzzeitformel.
+- Alte SM-2-Stände ohne FSRS-Werte: Start mit S = Abstand (mindestens 1), D = 5.
+- Statistik: Ø Abrufwahrscheinlichkeit heute über die gelernten Karten (`FSRS.retrievability`).
+- Bewertungsprotokoll `sc_reviews`: `[Karten-ID, Datum, Knopf]`, höchstens 20 000 Einträge, nur lokal. Grundlage für ein späteres Parameter-Training.
 
 **State pro Karte:**
 ```json
 {
+  "stability": 10.96, "difficulty": 2.11, "lapses": 0,
   "easeFactor": 2.5,
-  "interval": 15,
-  "repetitions": 3,
-  "nextReview": "2026-04-25",
-  "lastReview": "2026-04-10",
-  "totalReviews": 5,
-  "correctReviews": 4,
+  "interval": 11,
+  "repetitions": 2,
+  "nextReview": "2026-11-14",
+  "lastReview": "2026-11-03",
+  "totalReviews": 2,
+  "correctReviews": 2,
   "lastQuality": 4
 }
 ```
 
 - Alle Tagesangaben (`nextReview`, `lastReview`, Tagesstatistik, Streak) sind **lokale** Kalendertage (`localDateKey`), nicht UTC – sonst wäre es in Deutschland zwischen 0 und 1/2 Uhr noch „gestern“ (seit v1.28).
-- `lastQuality` (seit v1.28) speichert die letzte Bewertung; ältere Stände ohne das Feld bleiben gültig.
+- `interval` und `repetitions` werden auch unter FSRS geschrieben; Lernziele („sicher“) und Statistik („Reif“) nutzen sie unverändert.
 - Fälligkeit: `CardStore.isDue(id, card)` – mit Karte gilt der Prüfungsmodus der Lernziele (Abschnitt 12).
 
 ---
@@ -399,3 +412,4 @@ Spezifikation: [docs/PFLICHTENHEFT_ZIELE.md](docs/PFLICHTENHEFT_ZIELE.md).
 | **v1.32** | Meilensteine, Tagesziel mit Serie, Konfetti, Bonus-XP |
 | **v1.33** | Archiv mit echter Note, „Als neues Ziel“, Sicherung der Lernziele |
 | **v1.34** | FSRS-6 plant die Wiederholungen (Standard), SM-2 rechnet mit; Höchstabstand 365 Tage; lokales Bewertungsprotokoll |
+| **v1.35** | Einstellung „Lernverfahren“ mit Erklärung und Behaltensrate; Statistik „Du weißt heute voraussichtlich … %“ |

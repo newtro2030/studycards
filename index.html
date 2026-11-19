@@ -477,6 +477,7 @@
               <span class="stat-box-label">Genauigkeit</span>
             </div>
           </div>
+          <p class="stats-retention hidden" id="stats-retention"></p>
         </div>
         <div class="card-panel">
           <h3>Aktivität (letzte 7 Tage)</h3>
@@ -600,6 +601,25 @@
             </label>
           </div>
         </div>
+        <section class="card-panel" id="settings-scheduler" aria-labelledby="settings-scheduler-title">
+          <h3 id="settings-scheduler-title">Lernverfahren</h3>
+          <div class="pomo-segment" role="radiogroup" aria-label="Lernverfahren">
+            <label><input type="radio" name="sched-algorithm" value="fsrs"> <span>FSRS (empfohlen)</span></label>
+            <label><input type="radio" name="sched-algorithm" value="sm2"> <span>SM-2 (klassisch)</span></label>
+          </div>
+          <p class="setting-info sched-explain" id="sched-explain" aria-live="polite"></p>
+          <div class="setting-row" id="sched-retention-row">
+            <label class="setting-label" for="settings-retention">Behaltensrate</label>
+            <select id="settings-retention">
+              <option value="0.8">80 %</option>
+              <option value="0.85">85 %</option>
+              <option value="0.9" selected>90 % (Standard)</option>
+              <option value="0.95">95 %</option>
+            </select>
+          </div>
+          <p class="setting-info" id="sched-retention-info">So sicher willst du deine Karten können. Mehr Prozent bedeutet mehr Wiederholungen.</p>
+          <p class="setting-info">Du kannst jederzeit wechseln. Dein Lernstand bleibt erhalten. Spätestens nach einem Jahr kommt jede Karte wieder.</p>
+        </section>
         <section class="card-panel" id="settings-pomodoro-profile" aria-labelledby="settings-pomodoro-profile-title">
           <h3 id="settings-pomodoro-profile-title">Pomodoro · Zeitprofil</h3>
           <div class="pomo-segment" role="radiogroup" aria-label="Zeitprofil">

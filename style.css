@@ -2900,3 +2900,20 @@ select:focus {
 #goal-archive.hidden {
   display: none;
 }
+
+/* ===== Lernverfahren (FSRS) ===== */
+.sched-explain {
+  margin: 12px 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.stats-retention {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
