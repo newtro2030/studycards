@@ -1,6 +1,6 @@
 # StudyCards — Architektur & Technologie
 
-Stand: **v1.33**
+Stand: **v1.34**
 
 ---
 
@@ -398,3 +398,4 @@ Spezifikation: [docs/PFLICHTENHEFT_ZIELE.md](docs/PFLICHTENHEFT_ZIELE.md).
 | **v1.31** | Ziel-Tagesplan getrennt vom allgemeinen Limit, Prüfungsmodus |
 | **v1.32** | Meilensteine, Tagesziel mit Serie, Konfetti, Bonus-XP |
 | **v1.33** | Archiv mit echter Note, „Als neues Ziel“, Sicherung der Lernziele |
+| **v1.34** | FSRS-6 plant die Wiederholungen (Standard), SM-2 rechnet mit; Höchstabstand 365 Tage; lokales Bewertungsprotokoll |

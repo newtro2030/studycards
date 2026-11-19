@@ -11,6 +11,7 @@
     cards: 'sc_cards',
     stats: 'sc_stats',
     cache: 'sc_cache',
+    reviews: 'sc_reviews', // Bewertungsprotokoll (FSRS F5)
   };
 
   const XP_TABLE = { 1: 2, 3: 5, 4: 10, 5: 15 };
@@ -72,7 +73,7 @@
   const MAX_FILES = 500;
   const MAX_TEXT_LENGTH = 10000;
   const FETCH_BATCH_SIZE = 10;
-  const APP_VERSION = 'v1.33'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
+  const APP_VERSION = 'v1.34'; // beim Release zusammen mit CACHE_NAME in sw.js erhöhen
   const SAFE_TOKEN = /^[A-Za-z0-9_]{20,255}$/;
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
   const IMAGE_CACHE = 'studycards-img';
@@ -274,76 +275,42 @@
     }
   };
 
-  // ===== SM-2 ALGORITHM =====
-  const SM2 = {
+  // ===== WIEDERHOLUNGSPLANUNG =====
+  // Rechenlogik in fsrs.js: FSRS-6 (Standard) oder SM-2, beide rechnen immer mit.
+  // Siehe docs/PFLICHTENHEFT_FSRS.md.
+  const Scheduler = {
+    options() {
+      const c = App.config || {};
+      return { today: today(), algorithm: c.algorithm, retention: c.retention };
+    },
     defaultState() {
-      return {
-        easeFactor: 2.5,
-        interval: 0,
-        repetitions: 0,
-        nextReview: today(),
-        lastReview: null,
-        totalReviews: 0,
-        correctReviews: 0,
-      };
+      return window.FSRS.defaultState(today());
     },
-
     calcNext(state, quality) {
-      // quality: 1=again, 3=hard, 4=good, 5=easy
-      const s = { ...state };
-      s.totalReviews++;
-      s.lastReview = today();
-      s.lastQuality = quality; // für den Wissensstand der Lernziele
-
-      if (quality >= 3) {
-        // Correct
-        s.correctReviews++;
-        if (s.repetitions === 0) {
-          s.interval = 1;
-        } else if (s.repetitions === 1) {
-          s.interval = 6;
-        } else {
-          s.interval = Math.round(s.interval * s.easeFactor);
-        }
-        s.repetitions++;
-      } else {
-        // Incorrect - reset
-        s.repetitions = 0;
-        s.interval = 1;
-      }
-
-      // Update ease factor
-      s.easeFactor = Math.max(
-        1.3,
-        s.easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-      );
-
-      // Hard: reduce interval by 15%
-      if (quality === 3) {
-        s.interval = Math.max(1, Math.round(s.interval * 0.85));
-      }
-
-      // Easy: bonus
-      if (quality === 5) {
-        s.interval = Math.round(s.interval * 1.3);
-      }
-
-      // Set next review date
-      const next = new Date();
-      next.setDate(next.getDate() + s.interval);
-      s.nextReview = localDateKey(next);
-
-      return s;
+      return window.FSRS.review(state, quality, this.options());
     },
-
     previewIntervals(state) {
-      return {
-        1: this.calcNext(state, 1).interval,
-        3: this.calcNext(state, 3).interval,
-        4: this.calcNext(state, 4).interval,
-        5: this.calcNext(state, 5).interval,
-      };
-    }
+      return window.FSRS.previewIntervals(state, this.options());
+    },
+  };
+
+  // Bewertungsprotokoll (F5): nur lokal, für ein späteres Parameter-Training.
+  // Fehler beim Speichern dürfen das Lernen nie stören.
+  const ReviewLog = {
+    add(cardId, quality) {
+      try {
+        let log = window.FSRS.appendLog(load(STORAGE_KEYS.reviews), cardId, today(), quality);
+        try {
+          save(STORAGE_KEYS.reviews, log);
+        } catch {
+          log = log.slice(Math.floor(log.length / 2)); // Speicher voll: ältere Hälfte verwerfen
+          save(STORAGE_KEYS.reviews, log);
+        }
+      } catch { /* Protokoll ist optional */ }
+    },
+    reset() {
+      try { localStorage.removeItem(STORAGE_KEYS.reviews); } catch { /* egal */ }
+    },
   };
 
   // ===== GITHUB API =====
@@ -528,13 +495,14 @@
     },
 
     getState(cardId) {
-      return this.states[cardId] || SM2.defaultState();
+      return this.states[cardId] || Scheduler.defaultState();
     },
 
     updateState(cardId, quality) {
       const current = this.getState(cardId);
-      this.states[cardId] = SM2.calcNext(current, quality);
+      this.states[cardId] = Scheduler.calcNext(current, quality);
       this.save();
+      ReviewLog.add(cardId, quality);
       return this.states[cardId];
     },
 
@@ -574,6 +542,7 @@
     reset() {
       this._states = {};
       this.save();
+      ReviewLog.reset();
     }
   };
 
@@ -603,6 +572,9 @@
       if (config.token && !SAFE_TOKEN.test(config.token)) return null;
       GitHub.token = config.token || null;
       config.newPerDay = Math.min(Math.max(1, parseInt(config.newPerDay) || DEFAULT_NEW_PER_DAY), 999);
+      // Lernverfahren (FSRS F3): unbekannte Werte → Standard
+      if (!window.FSRS.ALGORITHMS.includes(config.algorithm)) config.algorithm = window.FSRS.DEFAULT_ALGORITHM;
+      if (!window.FSRS.RETENTION_OPTIONS.includes(config.retention)) config.retention = window.FSRS.DEFAULT_RETENTION;
       return config;
     },
 
@@ -805,6 +777,8 @@
         owner, repo, folder, branch, token: token || undefined,
         newPerDay: prev.newPerDay || DEFAULT_NEW_PER_DAY,
         showXP: prev.showXP !== false,
+        algorithm: prev.algorithm || window.FSRS.DEFAULT_ALGORITHM,
+        retention: prev.retention || window.FSRS.DEFAULT_RETENTION,
       };
       GitHub.token = token || null;
       save(STORAGE_KEYS.config, this.config);
@@ -1247,7 +1221,7 @@
 
       // Show interval previews
       const state = CardStore.getState(card.id);
-      const previews = SM2.previewIntervals(state);
+      const previews = Scheduler.previewIntervals(state);
       for (const q of [1, 3, 4, 5]) previews[q] = GoalsUI.cappedDays(card, previews[q]);
       document.getElementById('interval-again').textContent = formatInterval(previews[1]);
       document.getElementById('interval-hard').textContent = formatInterval(previews[3]);
@@ -1363,7 +1337,7 @@
     _rateCard(quality) {
       const card = this.studyQueue[this.studyIndex];
 
-      // Update SM2 state
+      // Lernstand aktualisieren (FSRS oder SM-2)
       CardStore.updateState(card.id, quality);
 
       // If wrong, add back to queue for re-review

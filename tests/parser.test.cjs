@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 const context = {};
-vm.runInNewContext(source.slice(0, source.indexOf('  // ===== SM-2 ALGORITHM =====')) +
+vm.runInNewContext(source.slice(0, source.indexOf('  // ===== WIEDERHOLUNGSPLANUNG =====')) +
   'globalThis.Parser = Parser;})();', context);
 const parse = text => JSON.parse(JSON.stringify(context.Parser.extractCards(text, 'Wissen/Test.md')));
 

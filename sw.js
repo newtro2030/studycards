@@ -2,7 +2,7 @@
 // StudyCards - Service Worker v1.3
 // ============================================================
 
-const CACHE_NAME = 'studycards-v1.33';
+const CACHE_NAME = 'studycards-v1.34';
 
 // App-Shell: Dateien die sofort gecached werden (relativ zum SW-Scope)
 const APP_SHELL = [
@@ -12,6 +12,7 @@ const APP_SHELL = [
   './app.js',
   './pomodoro.js',
   './goals.js',
+  './fsrs.js',
   './manifest.json',
 ];
 

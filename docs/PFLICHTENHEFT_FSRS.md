@@ -131,3 +131,15 @@ Nach jedem Schritt: Bericht mit Testergebnis und Freigabe, Push nur nach ausdrü
 - Alte SM-2-Zustände: Start mit S = Abstand (mindestens 1), D = 5.
 - `retrievability(state, today)` für F4, `appendLog(log, cardId, today, quality)` für F5.
 - Tests `tests/fsrs.test.cjs`: 20 Tests. Die Referenzwerte wurden mit dem Originalcode von ts-fsrs berechnet und stimmen auf 6 Nachkommastellen überein. Insgesamt 98/98 Tests grün.
+
+**Schritt 2 – Einbau in die App (19.11.2026): fertig, v1.34**
+- `index.html` lädt `fsrs.js` vor `app.js`, `sw.js` speichert es offline (`studycards-v1.34`).
+- `app.js`: `SM2` ersetzt durch `Scheduler` (dünne Hülle um `window.FSRS`). Bewertung und Vorschau rechnen mit FSRS, wenn `config.algorithm` fehlt oder `'fsrs'` ist. Mit `'sm2'` plant SM-2 wie bisher.
+- `config.algorithm` und `config.retention` werden geprüft; unbekannte Werte → Standard (FSRS, 90 %). Die Oberfläche dafür folgt in Schritt 3.
+- `ReviewLog` schreibt jede Bewertung nach `sc_reviews`. Ist der Speicher voll, wird die ältere Hälfte verworfen. Fehler stören das Lernen nie. „Fortschritt zurücksetzen“ löscht das Protokoll mit.
+- Prüfung im Browser (schule-cards, 513 Karten):
+  - Neue Karte: Vorschau 1 · 1 · 2 · 8 Tage. „Gut“ speichert S = 2,3065, D = 2,118 und einen Termin in 2 Tagen. Das Protokoll hat 1 Eintrag.
+  - „Nochmal“: Die Karte kommt in der Runde erneut (26 → 27) und ist morgen fällig.
+  - Mit `algorithm: 'sm2'` zeigt die Vorschau 1 · 1 · 1 · 1 wie bisher. Zurück auf FSRS ohne Verlust.
+  - Alter SM-2-Zustand (Abstand 6) ergibt mit FSRS 1 · 8 · 9 · 12 Tage.
+  - Lernziele und Tagesplan laufen weiter, die Konsole zeigt keine Fehler. 98/98 Tests grün.
